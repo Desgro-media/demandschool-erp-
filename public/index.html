@@ -163,6 +163,8 @@
   .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:12.5px;font-weight:600;}
   .chip.active{background:var(--solid);border-color:var(--solid);color:#fff;}
   .chip:not(.active):hover{border-color:var(--brand);color:var(--ink);}
+  .date-chip{font-size:12.5px;font-weight:600;color:var(--ink-soft);padding:6px 12px;border:1px solid var(--line);border-radius:100px;background:var(--surface);white-space:nowrap;}
+  @media (max-width:760px){ .date-chip{display:none;} }
   .select-sm{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--surface);color:var(--ink);font-size:12.5px;}
 
   .btn{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);white-space:nowrap;}
@@ -426,7 +428,7 @@
   <div class="main">
     <div class="topbar">
       <div class="topbar-title" id="student-topbar-title"></div>
-      <div class="topbar-right"></div>
+      <div class="topbar-right"><div class="date-chip" data-date-chip></div></div>
     </div>
     <div class="content" id="student-content"></div>
   </div>
@@ -447,6 +449,7 @@
     <div class="topbar">
       <div class="topbar-title" id="topbar-title"></div>
       <div class="topbar-right">
+        <div class="date-chip" data-date-chip></div>
         <div class="search"><svg class="icon" style="width:14px;height:14px"><use href="#i-search"/></svg><input placeholder="Search…" id="global-search"></div>
         <div class="icon-btn"><svg class="icon"><use href="#i-bell"/></svg></div>
         <div class="avatar" id="topbar-avatar">TH</div>
@@ -481,7 +484,10 @@ const inr = n => "₹" + Math.round(Number(n)||0).toLocaleString("en-IN");
 const fmtDate = iso => iso ? new Date(iso+"T00:00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}) : "—";
 const fmtDateShort = iso => iso ? new Date(iso+"T00:00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short"}) : "—";
 const initials = name => String(name||"").split(" ").map(p=>p[0]).filter(Boolean).slice(0,2).join("").toUpperCase();
-const TODAY = "2026-09-15";
+// "Today" is the real local date, read when the page loads. A tab left open past midnight saves and reloads itself
+// (see the rollover check in the sync layer), so the date, month and attendance always roll over together.
+const localISODate = () => { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+const TODAY = localISODate();
 function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
 function addDays(iso, days){ const d = new Date(iso+"T00:00:00"); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
 function toast(msg){
@@ -805,8 +811,12 @@ let paymentRequests = [
   {id:"PMR-02",empId:"EMP-105",category:"Purchase / Vendor",amount:6500,reason:"Stock footage licenses for the Q4 reels batch",requested:"2026-09-08",status:"Approved",paidDate:"2026-09-09",accountId:"BANK-01"},
 ];
 
-const payroll = { selectedMonth:"2026-09", history:{ "2026-08":{entries:{}}, "2026-09":{entries:{}} } };
-const MONTH_LABEL = {"2026-08":"August 2026","2026-09":"September 2026"};
+const payroll = { selectedMonth:TODAY.slice(0,7), history:{ "2026-08":{entries:{}}, "2026-09":{entries:{}} } };
+// Label for ANY month ("2026-10" -> "October 2026"), not just the two months the sample data covers.
+const MONTH_LABEL = new Proxy({}, {
+  get:(t,k)=> (typeof k==="string" && /^\d{4}-\d{2}$/.test(k)) ? monthLabel(k) : undefined,
+  has:(t,k)=> typeof k==="string" && /^\d{4}-\d{2}$/.test(k)
+});
 function monthLabel(m){ const [y,mm] = m.split('-').map(Number); return new Date(y, mm-1, 1).toLocaleDateString('en-US', {month:'long', year:'numeric'}); }
 function monthFilterOptions(dates, current){
   const months = [...new Set(dates.filter(Boolean).map(d=>d.slice(0,7)))].sort().reverse();
@@ -943,6 +953,23 @@ employees.forEach(e=>{ if(!SEPT_PAYROLL_PENDING.has(e.id)) payroll.history["2026
   const c = computePayrollRow(byId(id),"2026-09");
   payroll.history["2026-09"].entries[id].payments.push({amount:c.net, date:"2026-09-12", note:"Full settlement"});
 });
+
+// Payroll keeps one sheet per month, but the sample data only has Aug/Sep 2026. Make sure every month from the
+// earliest sheet up to the current one exists (empty until HR adds people), or the payroll and accounts screens
+// would break the moment a new month starts. Called at load and whenever payroll is replaced from the server.
+function ensurePayrollMonths(){
+  const cur = TODAY.slice(0,7);
+  const keys = Object.keys(payroll.history).concat(cur).sort();
+  let [y,m] = keys[0].split('-').map(Number);
+  const [ey,em] = keys[keys.length-1].split('-').map(Number);
+  while(y<ey || (y===ey && m<=em)){
+    const k = y+'-'+String(m).padStart(2,'0');
+    if(!payroll.history[k]) payroll.history[k] = {entries:{}};
+    if(++m>12){ m=1; y++; }
+  }
+  if(!payroll.history[payroll.selectedMonth]) payroll.selectedMonth = cur;
+}
+ensurePayrollMonths();
 
 // Withdrawal requests — against a month that's already fully earned (closed) but not yet fully paid.
 // Distinct from Advance Salary (which is against the current, still-open month) — see
@@ -2435,8 +2462,8 @@ function viewDashboard(){
   const receivable = invoices.reduce((s,i)=>s+invoiceBalance(i),0);
   const overdueInv = invoices.filter(i=>invoiceStatus(i)==="Overdue").reduce((s,i)=>s+invoiceBalance(i),0);
   const payableOutstanding = payables.reduce((s,p)=>s+payableBalance(p),0);
-  const revenueMTD = invoices.filter(i=>i.issued.slice(0,7)==="2026-09").reduce((s,i)=>s+invoiceTotal(i),0);
-  const publishedMTD = contentItems.filter(c=>c.stage==="Published" && c.due.slice(0,7)==="2026-09").length;
+  const revenueMTD = invoices.filter(i=>i.issued.slice(0,7)===TODAY.slice(0,7)).reduce((s,i)=>s+invoiceTotal(i),0);
+  const publishedMTD = contentItems.filter(c=>c.stage==="Published" && c.due.slice(0,7)===TODAY.slice(0,7)).length;
 
   const needsReview = [
     ...leaveRequests.filter(l=>l.status==="Pending").map(l=>({txt:`${byId(l.empId).name} requested ${l.days} day${l.days>1?'s':''} ${l.type==="WFH"?"work from home":l.type.toLowerCase()+" leave"}`, sub:`applied ${fmtDateShort(l.applied)}`})),
@@ -2467,7 +2494,7 @@ function viewDashboard(){
       <div class="kpi-sub">${overdueTasks} overdue</div>
     </div>
     <div class="kpi-card hero">
-      <div class="kpi-top"><span class="kpi-label">Revenue — September</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-receipt"/></svg></div></div>
+      <div class="kpi-top"><span class="kpi-label">Revenue — ${monthLabel(TODAY.slice(0,7)).split(" ")[0]}</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-receipt"/></svg></div></div>
       <div class="kpi-value mono">${inr(revenueMTD)}</div>
       <div class="kpi-sub">invoiced this month</div>
     </div>
@@ -4284,7 +4311,7 @@ function openRecordPayment(id){
 function mktOverview(){
   const activeContent = contentItems.filter(c=>c.stage!=="Published").length;
   const overdueContent = contentItems.filter(c=>c.stage!=="Published" && c.due<TODAY).length;
-  const publishedMTD = contentItems.filter(c=>c.stage==="Published" && c.due.slice(0,7)==="2026-09").length;
+  const publishedMTD = contentItems.filter(c=>c.stage==="Published" && c.due.slice(0,7)===TODAY.slice(0,7)).length;
   const adRows = metaAdsCampaigns.map(adMetrics);
   const totalAdSpend = adRows.reduce((s,r)=>s+r.spend,0);
   const totalAdLeads = adRows.reduce((s,r)=>s+r.leads,0);
@@ -6260,7 +6287,7 @@ function openAddInvoice(preselectStudentId){
       ${quoteServiceRows([])}
       <div id="quote-total-indicator" style="font-size:13px;padding-top:2px;">Total: <b>₹0</b></div>
       <div class="field-row">
-        <div><label class="field-label">Invoice No.</label><input class="field-input" name="invoiceNo" required placeholder="DS-2026-1049"></div>
+        <div><label class="field-label">Invoice No.</label><input class="field-input" name="invoiceNo" required placeholder="DS-${TODAY.slice(0,4)}-1049"></div>
         <div><label class="field-label">Issued</label><input class="field-input" type="date" name="issued" value="${TODAY}" required></div>
         <div><label class="field-label">Due</label><input class="field-input" type="date" name="due" required></div>
       </div>
@@ -6694,7 +6721,7 @@ function openApproveQuotePayment(quoteId, idx){
     // Create the invoice on the first approved payment, then top it up on every later one.
     if(!q.invoiceId){
       const newId = "INV-"+(1000+invoices.length+1);
-      const invoiceNo = "DS-2026-"+(1000+invoices.length+1);
+      const invoiceNo = "DS-"+TODAY.slice(0,4)+"-"+(1000+invoices.length+1);
       invoices.unshift({id:newId, studentId:q.studentId, items:q.items.slice(), invoiceNo, issued:date, due:date, payments:[]});
       q.invoiceId = newId;
     }
@@ -7110,6 +7137,15 @@ function applyServerValue(key, value){
     attendanceByDate[TODAY] = attendanceToday;
     return;
   }
+  if(key==='payroll'){
+    // Server copies only hold the months that had activity: re-create the empty sheets up to the current month,
+    // and keep the month this user is looking at.
+    const keep = payroll.selectedMonth;
+    replaceInPlace(payroll, value);
+    ensurePayrollMonths();
+    if(keep && payroll.history[keep]) payroll.selectedMonth = keep;
+    return;
+  }
   replaceInPlace(SYNC_KEYS[key](), value);
 }
 // In-memory ID counters restart on every page load; after real data is loaded they must continue from
@@ -7127,6 +7163,7 @@ function loadServerState(state){
     applyServerValue(k, state[k].value);
     syncVersions[k] = state[k].version;
   }
+  ensurePayrollMonths();
   // A collection the server has never stored keeps the app's built-in starting data. Mark it unsaved ('')
   // so the first person allowed to write it uploads it — otherwise the server would have no employee
   // list to check logins and roles against.
@@ -7177,7 +7214,11 @@ function mergeArrays(base, mine, theirs){
 }
 function mergeObjects(base, mine, theirs){
   const out = { ...theirs };
-  for(const k of Object.keys(mine)) if(!sameJson(mine[k], base[k])) out[k] = mine[k];
+  for(const k of Object.keys(mine)){
+    if(sameJson(mine[k], base[k])) continue;                                   // untouched here
+    if(isPlainObj(mine[k]) && isPlainObj(base[k]) && isPlainObj(theirs[k])) out[k] = mergeObjects(base[k], mine[k], theirs[k]);  // e.g. payroll month by month
+    else out[k] = mine[k];
+  }
   for(const k of Object.keys(base)) if(!(k in mine)) delete out[k];
   return out;
 }
@@ -7296,12 +7337,34 @@ async function saveNow(){
   setInterval(queueSave, 8000);
   setInterval(pullUpdates, 45000);                                   // see teammates' changes without reloading
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) pullUpdates(); });
+  // "Today" is fixed when the page loads, so a tab left open across midnight reloads itself once everything is
+  // saved (never while a dialog is open, someone is typing, or changes are still unsaved).
+  const checkRollover = async ()=>{
+    if(localISODate() === TODAY) return;
+    if(syncEnabled){
+      const ov = document.getElementById('overlay'), a = document.activeElement;
+      if((ov && !ov.hidden) || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+      try{ await saveNow(); }catch(_){}
+      if(syncWritable.some(k=>SYNC_KEYS[k] && JSON.stringify(SYNC_KEYS[k]())!==syncSnap[k])) return;   // save failed: try again next minute
+      syncEnabled = false;
+    }
+    location.reload();
+  };
+  setInterval(checkRollover, 60000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkRollover(); });
   window.addEventListener('beforeunload', e=>{
     if(!syncEnabled) return;
     const pending = syncBusy || syncWritable.some(k=>SYNC_KEYS[k] && JSON.stringify(SYNC_KEYS[k]())!==syncSnap[k]);
     if(pending){ e.preventDefault(); e.returnValue = ''; }
   });
 }
+
+// The date in the top bar always comes from TODAY, i.e. the real local date.
+function paintDate(){
+  const txt = new Date(TODAY+'T00:00:00').toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+  document.querySelectorAll('[data-date-chip]').forEach(el=>{ el.textContent = txt; });
+}
+paintDate();
 
 /* ---- login ---- */
 let loginMode = 'staff';
@@ -7326,8 +7389,15 @@ function applyCurrentUser(emp){
 }
 // Loads this user's data from the server and opens the right shell. Throws if their record is missing.
 async function bootSession(user, writable, readable){
+  // The login screen may have been open since yesterday: start from today's date, not the date the page loaded.
+  if(localISODate() !== TODAY){ location.reload(); return; }
   const { state } = await api('state');
   loadServerState(state);
+  {  // every sign-in opens payroll on the current month (the stored "selected month" is just someone's last click)
+    const clean = syncSnap.payroll === JSON.stringify(payroll);
+    payroll.selectedMonth = TODAY.slice(0,7);
+    if(clean) syncSnap.payroll = JSON.stringify(payroll);
+  }
   syncWritable = writable || [];
   // The page ships with built-in starting data for every collection. For collections this user is not
   // allowed to read, drop it, so a restricted account never works with (or sees) placeholder records.

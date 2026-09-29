@@ -56,6 +56,15 @@ function applyServerValue(key, value){
     attendanceByDate[TODAY] = attendanceToday;
     return;
   }
+  if(key==='payroll'){
+    // Server copies only hold the months that had activity: re-create the empty sheets up to the current month,
+    // and keep the month this user is looking at.
+    const keep = payroll.selectedMonth;
+    replaceInPlace(payroll, value);
+    ensurePayrollMonths();
+    if(keep && payroll.history[keep]) payroll.selectedMonth = keep;
+    return;
+  }
   replaceInPlace(SYNC_KEYS[key](), value);
 }
 // In-memory ID counters restart on every page load; after real data is loaded they must continue from
@@ -73,6 +82,7 @@ function loadServerState(state){
     applyServerValue(k, state[k].value);
     syncVersions[k] = state[k].version;
   }
+  ensurePayrollMonths();
   // A collection the server has never stored keeps the app's built-in starting data. Mark it unsaved ('')
   // so the first person allowed to write it uploads it — otherwise the server would have no employee
   // list to check logins and roles against.
@@ -123,7 +133,11 @@ function mergeArrays(base, mine, theirs){
 }
 function mergeObjects(base, mine, theirs){
   const out = { ...theirs };
-  for(const k of Object.keys(mine)) if(!sameJson(mine[k], base[k])) out[k] = mine[k];
+  for(const k of Object.keys(mine)){
+    if(sameJson(mine[k], base[k])) continue;                                   // untouched here
+    if(isPlainObj(mine[k]) && isPlainObj(base[k]) && isPlainObj(theirs[k])) out[k] = mergeObjects(base[k], mine[k], theirs[k]);  // e.g. payroll month by month
+    else out[k] = mine[k];
+  }
   for(const k of Object.keys(base)) if(!(k in mine)) delete out[k];
   return out;
 }
@@ -242,12 +256,34 @@ async function saveNow(){
   setInterval(queueSave, 8000);
   setInterval(pullUpdates, 45000);                                   // see teammates' changes without reloading
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) pullUpdates(); });
+  // "Today" is fixed when the page loads, so a tab left open across midnight reloads itself once everything is
+  // saved (never while a dialog is open, someone is typing, or changes are still unsaved).
+  const checkRollover = async ()=>{
+    if(localISODate() === TODAY) return;
+    if(syncEnabled){
+      const ov = document.getElementById('overlay'), a = document.activeElement;
+      if((ov && !ov.hidden) || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+      try{ await saveNow(); }catch(_){}
+      if(syncWritable.some(k=>SYNC_KEYS[k] && JSON.stringify(SYNC_KEYS[k]())!==syncSnap[k])) return;   // save failed: try again next minute
+      syncEnabled = false;
+    }
+    location.reload();
+  };
+  setInterval(checkRollover, 60000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkRollover(); });
   window.addEventListener('beforeunload', e=>{
     if(!syncEnabled) return;
     const pending = syncBusy || syncWritable.some(k=>SYNC_KEYS[k] && JSON.stringify(SYNC_KEYS[k]())!==syncSnap[k]);
     if(pending){ e.preventDefault(); e.returnValue = ''; }
   });
 }
+
+// The date in the top bar always comes from TODAY, i.e. the real local date.
+function paintDate(){
+  const txt = new Date(TODAY+'T00:00:00').toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+  document.querySelectorAll('[data-date-chip]').forEach(el=>{ el.textContent = txt; });
+}
+paintDate();
 
 /* ---- login ---- */
 let loginMode = 'staff';
@@ -272,8 +308,15 @@ function applyCurrentUser(emp){
 }
 // Loads this user's data from the server and opens the right shell. Throws if their record is missing.
 async function bootSession(user, writable, readable){
+  // The login screen may have been open since yesterday: start from today's date, not the date the page loaded.
+  if(localISODate() !== TODAY){ location.reload(); return; }
   const { state } = await api('state');
   loadServerState(state);
+  {  // every sign-in opens payroll on the current month (the stored "selected month" is just someone's last click)
+    const clean = syncSnap.payroll === JSON.stringify(payroll);
+    payroll.selectedMonth = TODAY.slice(0,7);
+    if(clean) syncSnap.payroll = JSON.stringify(payroll);
+  }
   syncWritable = writable || [];
   // The page ships with built-in starting data for every collection. For collections this user is not
   // allowed to read, drop it, so a restricted account never works with (or sees) placeholder records.

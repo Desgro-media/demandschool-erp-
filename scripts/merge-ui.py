@@ -116,6 +116,30 @@ must_replace('.chip.active{background:var(--ink);border-color:var(--ink);color:#
 must_replace('const e = byId(empId); const a = attendanceToday[empId];',
              'const e = byId(empId); const a = attendanceToday[empId] || {status:"present", in:null};', label='attendance history: missing today record')
 
+# ---------- 11. real date instead of the fixed demo date ----------
+# The UI was built around a hard-coded "today" (15 Sep 2026). Use the real local date, and make everything that
+# hung off that fixed month (payroll sheets, month labels, dashboard filters, invoice year) follow it.
+def snippet(name):
+    return open(os.path.join(here, 'merge', name), encoding='utf8').read()
+
+must_replace('const TODAY = "2026-09-15";', snippet('today.js').rstrip('\n'), label='TODAY = real local date')
+must_replace('const MONTH_LABEL = {"2026-08":"August 2026","2026-09":"September 2026"};', snippet('month-label.js').rstrip('\n'), label='MONTH_LABEL for any month')
+must_replace('const payroll = { selectedMonth:"2026-09", history:{ "2026-08":{entries:{}}, "2026-09":{entries:{}} } };',
+             'const payroll = { selectedMonth:TODAY.slice(0,7), history:{ "2026-08":{entries:{}}, "2026-09":{entries:{}} } };', label='payroll default month')
+WITHDRAWALS = "// Withdrawal requests — against a month that's already fully earned (closed) but not yet fully paid."
+must_replace(WITHDRAWALS, snippet('ensure-payroll.js') + WITHDRAWALS, label='ensurePayrollMonths')
+must_replace('i.issued.slice(0,7)==="2026-09"', 'i.issued.slice(0,7)===TODAY.slice(0,7)', label='dashboard revenue month')
+must_replace('c.due.slice(0,7)==="2026-09"', 'c.due.slice(0,7)===TODAY.slice(0,7)', count='all', label='published-this-month filters')
+must_replace('<span class="kpi-label">Revenue — September</span>', '<span class="kpi-label">Revenue — ${monthLabel(TODAY.slice(0,7)).split(" ")[0]}</span>', label='dashboard revenue label')
+must_replace('"DS-2026-"+(1000+invoices.length+1)', '"DS-"+TODAY.slice(0,4)+"-"+(1000+invoices.length+1)', label='invoice number year')
+must_replace('placeholder="DS-2026-1049"', 'placeholder="DS-${TODAY.slice(0,4)}-1049"', label='invoice number placeholder')
+
+# ---------- 12. today's date, visible in the top bar of both shells ----------
+must_replace('<div class="topbar-right"></div>', '<div class="topbar-right"><div class="date-chip" data-date-chip></div></div>', label='student top bar date chip')
+must_replace('<div class="topbar-right">\n        <div class="search">', '<div class="topbar-right">\n        <div class="date-chip" data-date-chip></div>\n        <div class="search">', label='staff top bar date chip')
+must_replace('  .select-sm{border:1px solid',
+             '  .date-chip{font-size:12.5px;font-weight:600;color:var(--ink-soft);padding:6px 12px;border:1px solid var(--line);border-radius:100px;background:var(--surface);white-space:nowrap;}\n  @media (max-width:760px){ .date-chip{display:none;} }\n  .select-sm{border:1px solid', label='date chip css')
+
 open(out_path, 'w', encoding='utf8').write(t)
 print('\n'.join(log))
 print('written', out_path, len(t.encode('utf8')), 'bytes')

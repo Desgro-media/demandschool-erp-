@@ -76,7 +76,7 @@ also visible to anyone in the page source.
 
 - Each collection is stored and saved as a whole; two people editing the same collection at once get a conflict and their screen refreshes (last-save-wins is deliberately not used).
 - Requests are capped at ~4 MB (Vercel limit). Task/assignment attachments currently record only the file name and size, not the file itself; real file storage (e.g. Vercel Blob) would be a separate addition.
-- The UI treats "today" as the fixed date `TODAY` in the UI file (15 Sep 2026): attendance "today", overdue checks and the current month all follow it, and payroll only has Aug/Sep 2026 sheets. Make it dynamic before relying on the app past that period.
+- Dates: "today" is the real local date (shown in the top bar). It is read when the page loads; a tab left open past midnight saves and reloads itself. Payroll month sheets are created automatically up to the current month. The built-in sample data keeps its own Aug/Sep 2026 dates, so it ages as time passes.
 - Two people editing the *same record* at the same moment: the last save wins for that record (edits to different records are merged, nothing is lost).
 
 ## Testing
@@ -90,6 +90,7 @@ node qa/qa-crawl.mjs                                          # every screen x e
 node qa/qa-detail.mjs                                         # every detail page + all printable documents
 node qa/qa-flows.mjs                                          # create employee/student logins, leave approval,
                                                               # simultaneous edits, offline/500, revocation, injection
+node qa/qa-dates.mjs                                          # fake clock: new month, year-end, leap day, overnight rollover
 ```
 
 To test against real PostgreSQL semantics without a Neon database: `bash qa/neon-sim/run.sh`, then repeat the
