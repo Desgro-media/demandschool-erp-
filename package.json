@@ -1,0 +1,15 @@
+{
+  "name": "demand-school-erp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "node dev-server.js",
+    "init-db": "node scripts/init-db.js",
+    "set-password": "node scripts/set-password.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0"
+  }
+}
