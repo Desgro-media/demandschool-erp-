@@ -1,3 +1,4 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Demand School ERP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -539,10 +540,44 @@ let courseSettings = {
   "WhatsApp Personal Branding (WPB)": {price:30000, duration:"4 weeks", mode:"Live online", description:"Building a personal brand and client pipeline through WhatsApp-first marketing and broadcast systems."},
   "AI Video Editing (AIVE)": {price:40000, duration:"6 weeks", mode:"Live online + on-campus (Kozhikode)", description:"AI-assisted video editing workflows — Runway, CapCut and generative tools — for reels, ads and long-form content."},
 };
-function courseSettingsOf(name){ return courseSettings[name] || {price:0,duration:"",mode:"",description:""}; }
+function courseSettingsOf(name){ return courseSettings[name] || {price:0,duration:"",mode:"",description:"",syllabus:[]}; }
+// Syllabus — an ordered list of modules {title, duration, topics} kept on courseSettings[name].syllabus,
+// separate from a batch's dated Academic Calendar: this is the fixed curriculum outline for the course
+// itself (what it covers, in what order), not a specific batch's day-by-day trainer schedule. Editable
+// from the Course detail page (openEditSyllabus()) and shown read-only to students on their portal.
+function syllabusOf(name){ const cs = courseSettingsOf(name); return Array.isArray(cs.syllabus) ? cs.syllabus : []; }
+courseSettings["Online Content Creation (OCC)"].syllabus = [
+  {title:"Content Strategy & Niche Positioning", duration:"1 week", topics:"Finding your niche\nAudience research\nContent pillars and calendar planning"},
+  {title:"Scripting & Storytelling", duration:"1 week", topics:"Hook writing\nScript structures for Reels vs YouTube\nStorytelling frameworks"},
+  {title:"Shooting Fundamentals", duration:"1 week", topics:"Phone vs camera setups\nLighting basics\nFraming and B-roll"},
+  {title:"Editing & Publishing", duration:"2 weeks", topics:"CapCut/Premiere workflow\nPacing and captions\nPlatform-specific publishing (Reels, Shorts, LinkedIn)"},
+  {title:"Growth & Analytics", duration:"1 week", topics:"Reading platform analytics\nDoubling down on what works\nBuilding a posting system"},
+];
+courseSettings["Modern Marketing Architect (MMA)"].syllabus = [
+  {title:"Marketing Foundations", duration:"2 weeks", topics:"Positioning and ICP\nBrand messaging\nFunnel thinking"},
+  {title:"Content & Organic Growth", duration:"2 weeks", topics:"Content systems\nSEO basics\nEmail and WhatsApp marketing"},
+  {title:"Performance Marketing", duration:"2 weeks", topics:"Meta Ads fundamentals\nCampaign structuring\nBudgeting and optimization"},
+  {title:"Analytics & Client Delivery", duration:"2 weeks", topics:"Reporting dashboards\nClient communication\nCapstone brief"},
+];
 
 const employees = [
   {id:"EMP-101",name:"Thanseem",dept:"Administrative",role:"COO & Head, Demand School",joined:"2024-01-15",email:"thanseemca@gmail.com",phone:"+91 94950 10101",salary:65000,empType:"Permanent"},
+  {id:"EMP-102",name:"Fathima K",dept:"Administrative",role:"Operations Manager",joined:"2025-02-01",email:"fathima@demandschool.in",phone:"+91 94950 10102",salary:32000,empType:"Permanent"},
+  {id:"EMP-103",name:"Sudheer Nair",dept:"Academics",role:"Academic Head",joined:"2025-03-10",email:"sudheer@demandschool.in",phone:"+91 94950 10103",salary:38000,empType:"Permanent",course:""},
+  {id:"EMP-104",name:"Anu",dept:"Academics",role:"Lead Trainer — Content Creation & Placements",joined:"2024-11-01",email:"anu@demandschool.in",phone:"+91 94950 10104",salary:32000,empType:"Permanent",course:"Online Content Creation (OCC)"},
+  {id:"EMP-105",name:"Roshan",dept:"Academics",role:"Trainer — Performance Marketing (Meta Ads)",joined:"2025-01-20",email:"roshan@demandschool.in",phone:"+91 94950 10105",salary:28000,empType:"Permanent",course:"AI Video Editing (AIVE)"},
+  {id:"EMP-106",name:"Vaishnav P",dept:"Academics",role:"Trainer — MMA, Phase 1",joined:"2025-04-05",email:"vaishnav@demandschool.in",phone:"+91 94950 10106",salary:26000,empType:"Permanent",course:"Modern Marketing Architect (MMA)"},
+  {id:"EMP-107",name:"Naseef Rahman",dept:"Academics",role:"Trainer — MMA, Phase 2",joined:"2025-04-05",email:"naseef@demandschool.in",phone:"+91 94950 10107",salary:26000,empType:"Permanent",course:"Modern Marketing Architect (MMA)"},
+  {id:"EMP-117",name:"Fahad Ali",dept:"Academics",role:"Guest Trainer — AI Video Editing",joined:"2026-08-01",email:"fahad@demandschool.in",phone:"+91 94950 10117",salary:0,hourlyRate:450,empType:"Guest Trainer",course:"AI Video Editing (AIVE)"},
+  {id:"EMP-108",name:"Chachu",dept:"Sales",role:"Admissions Manager",joined:"2024-12-01",email:"chachu@demandschool.in",phone:"+91 94950 10108",salary:24000,empType:"Permanent"},
+  {id:"EMP-109",name:"Safeeda",dept:"Sales",role:"Admissions Counsellor",joined:"2025-05-12",email:"safeeda@demandschool.in",phone:"+91 94950 10109",salary:19000,empType:"Permanent"},
+  {id:"EMP-110",name:"Amina Farook",dept:"Marketing",role:"Content Lead",joined:"2025-02-17",email:"amina@demandschool.in",phone:"+91 94950 10110",salary:24000,empType:"Permanent"},
+  {id:"EMP-111",name:"Rishab K",dept:"Marketing",role:"Social Media Executive",joined:"2025-06-19",email:"rishab@demandschool.in",phone:"+91 94950 10111",salary:20000,empType:"Permanent"},
+  {id:"EMP-112",name:"Jithin Das",dept:"Marketing",role:"Video Editor",joined:"2025-03-22",email:"jithin@demandschool.in",phone:"+91 94950 10112",salary:23000,empType:"Permanent"},
+  {id:"EMP-113",name:"Risvan",dept:"Marketing",role:"Graphic Designer",joined:"2025-06-01",email:"risvan@demandschool.in",phone:"+91 94950 10113",salary:22000,empType:"Permanent"},
+  {id:"EMP-114",name:"Afeefa P",dept:"Administrative",role:"Student Support Executive",joined:"2026-06-15",email:"afeefa@demandschool.in",phone:"+91 94950 10114",salary:18000,empType:"Probation"},
+  {id:"EMP-115",name:"Reshma Beegum",dept:"Administrative",role:"HR Executive",joined:"2025-08-14",email:"reshma@demandschool.in",phone:"+91 94950 10115",salary:22000,empType:"Permanent"},
+  {id:"EMP-116",name:"Naveen Kumar",dept:"Administrative",role:"Accounts Executive",joined:"2025-01-01",email:"naveen@demandschool.in",phone:"+91 94950 10116",salary:24000,empType:"Permanent"},
 ];
 // Date of birth — placeholder data (spread deterministically so the calendar has something to show),
 // same as every other seeded HR figure in this dataset. Swap for real DOBs when this goes live.
@@ -576,9 +611,16 @@ function salaryHistoryFor(emp){
 }
 
 const attendanceToday = {
-  "EMP-101":{status:"present",in:"09:15"},
+  "EMP-101":{status:"present",in:"09:15"}, "EMP-102":{status:"present",in:"09:10"},
+  "EMP-103":{status:"present",in:"09:30"}, "EMP-104":{status:"present",in:"09:25"},
+  "EMP-105":{status:"late",in:"10:40"},    "EMP-106":{status:"present",in:"09:35"},
+  "EMP-107":{status:"leave",in:null},      "EMP-108":{status:"present",in:"09:20"},
+  "EMP-109":{status:"half",in:"09:40"},    "EMP-110":{status:"present",in:"09:18"},
+  "EMP-111":{status:"present",in:"09:22"}, "EMP-112":{status:"present",in:"09:45"},
+  "EMP-113":{status:"present",in:"09:12"}, "EMP-114":{status:"absent",in:null},
+  "EMP-115":{status:"present",in:"09:05"}, "EMP-116":{status:"wfh",in:"09:28"},
 };
-const monthPresentDays = {};
+const monthPresentDays = {"EMP-107":8,"EMP-114":9,"EMP-116":9};
 // Per-date attendance store, keyed by date then employee id — lets HR go back (or forward, within
 // reason) and mark/correct attendance for a day other than today. Today's date shares the same object
 // as attendanceToday so every existing "today" view keeps working unchanged.
@@ -591,8 +633,13 @@ function attendanceRecordFor(date){
   }
   return attendanceByDate[date];
 }
-// Everyone is left sparse until actually marked — dayAttendanceStatus() defaults to "present"
+// A couple of earlier-in-the-month records so the new monthly leave/WFH cap (see hrPolicy below) has
+// something to show — Naseef (EMP-107) is on "leave" today AND took a leave day on the 3rd (2 this
+// month, 1 over the 1/month allowance); Naveen (EMP-116) is "wfh" today AND worked from home on the
+// 5th (same story for WFH). Everyone else is left sparse — dayAttendanceStatus() defaults to "present"
 // for any employee/date combination that was never explicitly recorded.
+attendanceByDate["2026-09-03"] = { "EMP-107": {status:"leave", in:null} };
+attendanceByDate["2026-09-05"] = { "EMP-116": {status:"wfh", in:"09:30"} };
 // Reads a single employee's attendance status for a single date, defaulting to "present" — the same
 // lazy-default semantics attendanceRecordFor() uses for a whole day, but for one person without
 // materializing the rest of the roster.
@@ -724,13 +771,23 @@ function wfhExcessDaysFor(empId, month){
   const counts = monthlyAttendanceCounts(empId, month);
   return Math.max(0, counts.wfh - hrPolicy.paidWfhPerMonth);
 }
-let leaveRequests = [];
+let leaveRequests = [
+  {id:"LR-401",empId:"EMP-107",type:"Sick",from:"2026-09-14",to:"2026-09-16",days:3,reason:"Viral fever",status:"Approved",applied:"2026-09-13"},
+  {id:"LR-402",empId:"EMP-114",type:"Casual",from:"2026-09-18",to:"2026-09-18",days:1,reason:"Personal work",status:"Pending",applied:"2026-09-14"},
+  {id:"LR-403",empId:"EMP-109",type:"Earned",from:"2026-09-25",to:"2026-09-27",days:3,reason:"Family function",status:"Pending",applied:"2026-09-15"},
+  {id:"LR-404",empId:"EMP-114",type:"Casual",from:"2026-09-08",to:"2026-09-08",days:1,reason:"Personal",status:"Approved",applied:"2026-09-05"},
+  {id:"LR-405",empId:"EMP-112",type:"Unpaid",from:"2026-08-20",to:"2026-08-20",days:1,reason:"Personal",status:"Rejected",applied:"2026-08-18",note:"Student deadline week — all hands needed"},
+];
 
 // Advance Salary — money against THIS month's salary before it's earned. HR only decides Pending vs
 // Approved/Rejected; once Approved, it's Finance's call in Accounts > Payment Requests whether to pay
 // it fully or in parts. There is no recovery/installment mechanic — nothing is ever deducted back out
 // of payroll for an advance, so all that needs to be visible afterward is how much of it got paid.
-let advances = [];
+let advances = [
+  {id:"ADV-301",empId:"EMP-111",amount:8000,reason:"Medical expense",requested:"2026-08-28",status:"Approved",payments:[{amount:8000,date:"2026-08-29",note:"Full payout",accountId:"BANK-01"}]},
+  {id:"ADV-302",empId:"EMP-116",amount:6000,reason:"Bike repair",requested:"2026-09-10",status:"Pending",payments:[]},
+  {id:"ADV-303",empId:"EMP-113",amount:5000,reason:"Personal emergency",requested:"2026-08-05",status:"Approved",payments:[{amount:2500,date:"2026-08-06",note:"Partial — rest next cycle",accountId:"BANK-01"}]},
+];
 function advancePaid(a){ return (a.payments||[]).reduce((s,p)=>s+p.amount,0); }
 function advanceBalance(a){ return Math.max(0, a.amount - advancePaid(a)); }
 function advancePayStatus(a){
@@ -743,7 +800,10 @@ function advancePayStatus(a){
 // member fronted, etc. Anyone in the company can raise one; unlike Advance Salary it skips HR entirely
 // and lands straight in Accounts > Payment Requests for Finance to approve/pay or reject.
 const PAYMENT_REQUEST_CATEGORIES = ["Reimbursement","Travel","Purchase / Vendor","Other"];
-let paymentRequests = [];
+let paymentRequests = [
+  {id:"PMR-01",empId:"EMP-114",category:"Reimbursement",amount:2400,reason:"Snacks & refreshments — MMA batch 4 info session",requested:"2026-09-12",status:"Pending"},
+  {id:"PMR-02",empId:"EMP-105",category:"Purchase / Vendor",amount:6500,reason:"Stock footage licenses for the Q4 reels batch",requested:"2026-09-08",status:"Approved",paidDate:"2026-09-09",accountId:"BANK-01"},
+];
 
 const payroll = { selectedMonth:"2026-09", history:{ "2026-08":{entries:{}}, "2026-09":{entries:{}} } };
 const MONTH_LABEL = {"2026-08":"August 2026","2026-09":"September 2026"};
@@ -864,27 +924,77 @@ function earnedUnpaidFor(emp){
   return {month, net:c.net, paid:c.paid, balance:c.balance, requestable: Math.max(0, c.balance-pendingRequested)};
 }
 
+// ---- seed: August is mostly settled (one exception below, to demo Withdrawal Request against an
+// already-closed month); September is mid-review, showing pending adds and partial payments ----
+employees.forEach(e=>{ payroll.history["2026-08"].entries[e.id] = {gross:e.salary, payments:[]}; });
+const AUG_PAYROLL_PARTIAL = new Set(["EMP-107"]); // earned in full, only partly paid — real "earned, unpaid" balance
+employees.forEach(e=>{
+  const c = computePayrollRow(e,"2026-08");
+  const amount = AUG_PAYROLL_PARTIAL.has(e.id) ? Math.round(c.net*0.55) : c.net;
+  payroll.history["2026-08"].entries[e.id].payments.push({amount, date:"2026-08-31", note: AUG_PAYROLL_PARTIAL.has(e.id) ? "Partial — rest carried into September's cycle" : "Full settlement"});
+});
+const SEPT_PAYROLL_PENDING = new Set(["EMP-109","EMP-114","EMP-116","EMP-120","EMP-122"]);
+employees.forEach(e=>{ if(!SEPT_PAYROLL_PENDING.has(e.id)) payroll.history["2026-09"].entries[e.id] = {gross:e.salary, payments:[]}; });
+["EMP-101","EMP-103"].forEach(id=>{
+  const c = computePayrollRow(byId(id),"2026-09");
+  payroll.history["2026-09"].entries[id].payments.push({amount:Math.round(c.net*0.5), date:"2026-09-10", note:"Partial — fund shortage this cycle"});
+});
+["EMP-104","EMP-106"].forEach(id=>{
+  const c = computePayrollRow(byId(id),"2026-09");
+  payroll.history["2026-09"].entries[id].payments.push({amount:c.net, date:"2026-09-12", note:"Full settlement"});
+});
 
 // Withdrawal requests — against a month that's already fully earned (closed) but not yet fully paid.
 // Distinct from Advance Salary (which is against the current, still-open month) — see
 // closedPayrollMonth()/earnedUnpaidFor() above. Approving one just records an early payroll payment,
 // no recovery/installments involved since nothing was borrowed against future earnings.
-let withdrawalRequests = [];
+let withdrawalRequests = [
+  {id:"WD-01", empId:"EMP-107", month:"2026-08", amount:5000, requested:"2026-09-17", status:"Pending"},
+];
 
-let openPositions = [];
+let openPositions = [
+  {id:"POS-01",role:"Admissions Counsellor",dept:"Sales",openings:1,status:"Open",postedDate:"2026-08-20",archived:false},
+  {id:"POS-02",role:"Trainer — AI Video Editing",dept:"Academics",openings:1,status:"Open",postedDate:"2026-09-01",archived:false},
+  {id:"POS-03",role:"Student Support Intern",dept:"Administrative",openings:2,status:"Open",postedDate:"2026-09-08",archived:false},
+  {id:"POS-04",role:"Social Media Executive",dept:"Marketing",openings:1,status:"Filled",postedDate:"2026-07-15",archived:true},
+];
 const CANDIDATE_STAGES = ["Applied","Shortlisted","Interview","Offer","Hired"];
-let candidates = [];
+let candidates = [
+  {id:"CAND-01",posId:"POS-01",name:"Athul Krishnan",phone:"9847001122",email:"athul.k@gmail.com",stage:"Interview",appliedDate:"2026-09-02",archived:false},
+  {id:"CAND-02",posId:"POS-01",name:"Neha Balakrishnan",phone:"9847002233",email:"neha.b@gmail.com",stage:"Shortlisted",appliedDate:"2026-09-10",archived:false},
+  {id:"CAND-03",posId:"POS-02",name:"Sarath Menon",phone:"9847003344",email:"sarath.m@gmail.com",stage:"Offer",appliedDate:"2026-08-25",archived:false},
+  {id:"CAND-04",posId:"POS-03",name:"Fidha Rasheed",phone:"9847004455",email:"fidha.r@gmail.com",stage:"Applied",appliedDate:"2026-09-12",archived:false},
+  {id:"CAND-05",posId:"POS-03",name:"Midhun Raj",phone:"9847005566",email:"midhun.raj@gmail.com",stage:"Shortlisted",appliedDate:"2026-09-13",archived:false},
+  {id:"CAND-06",posId:"POS-04",name:"Anagha Suresh",phone:"9847006677",email:"anagha.s@gmail.com",stage:"Hired",appliedDate:"2026-07-20",archived:true},
+];
 
 // ---- Anonymous complaints — no name, employee ID or contact info is ever captured with a submission ----
 const COMPLAINT_CATEGORIES = ["Workplace Behavior","Harassment","Management / Leadership","Compensation & Benefits","Work Environment","Policy Violation","Other"];
-let complaints = [];
+let complaints = [
+  {id:"CMP-01",category:"Work Environment",dept:"Administrative",text:"The HiLITE classrooms get very warm by the afternoon batch — could we look at the AC schedule?",submitted:"2026-09-08",status:"Reviewed",note:"Flagged to facilities; AC timing adjusted for afternoon batches."},
+  {id:"CMP-02",category:"Management / Leadership",dept:"",text:"Feedback on a session is sometimes given in the team group instead of one-on-one, which is discouraging in front of others.",submitted:"2026-08-30",status:"New"},
+];
 
 // Broadcast announcements from HR/administration — posted from HR > Notices, shown to every team
 // member (most prominently on a Staff sign-in's My Workspace overview).
-let notices = [];
+let notices = [
+  {id:"NTC-01", title:"Diwali holiday schedule", message:"Office will be closed Oct 20–21 for Diwali. Regular hours resume Oct 22.", postedBy:"Reshma Beegum", postedDate:"2026-09-10"},
+  {id:"NTC-02", title:"Updated reimbursement process", message:"Expense reimbursements now route through the Accounts Executive — see HR Settings for the full policy.", postedBy:"Thanseem", postedDate:"2026-09-12"},
+];
 
 /* ===================== STUDENTS / ADMISSIONS (shared: Admissions module, Accounts) ===================== */
-let students = [];
+let students = [
+  {id:"STU-01",name:"Ayesha Fathima",course:"Modern Marketing Architect (MMA)",batch:"MMA-B4",city:"Kozhikode, India",coursesEnrolled:["Modern Marketing Architect (MMA)"],status:"Active",onboarded:"2026-07-10",counsellor:"Chachu",salesPerson:"Chachu"},
+  {id:"STU-02",name:"Muhammed Rayyan",course:"Online Content Creation (OCC)",batch:"OCC-B6",city:"Kochi, India",coursesEnrolled:["Online Content Creation (OCC)"],status:"Active",onboarded:"2026-08-01",counsellor:"Safeeda",salesPerson:"Safeeda"},
+  {id:"STU-03",name:"Nithya Menon",course:"WhatsApp Personal Branding (WPB)",batch:"WPB-B2",city:"Bengaluru, India",coursesEnrolled:["WhatsApp Personal Branding (WPB)"],status:"Active",onboarded:"2025-11-20",counsellor:"Chachu",salesPerson:"Chachu"},
+  {id:"STU-04",name:"Sarath PK",course:"Modern Marketing Architect (MMA)",batch:"MMA-B3",city:"Malappuram, India",coursesEnrolled:["Modern Marketing Architect (MMA)"],status:"Completed",onboarded:"2026-01-15",counsellor:"Safeeda",salesPerson:"Safeeda"},
+  {id:"STU-05",name:"Fathimath Nashwa",course:"Online Content Creation (OCC)",batch:"OCC-B5",city:"Doha, Qatar",coursesEnrolled:["Online Content Creation (OCC)"],status:"Active",onboarded:"2026-05-06",counsellor:"Chachu",salesPerson:"Chachu"},
+  {id:"STU-06",name:"Aromal Krishna",course:"AI Video Editing (AIVE)",batch:"AIVE-B1",city:"Thrissur, India",coursesEnrolled:["AI Video Editing (AIVE)"],status:"Active",onboarded:"2026-09-18",counsellor:"Safeeda",salesPerson:"Safeeda"},
+  {id:"STU-07",name:"Hiba Rahman",course:"Modern Marketing Architect (MMA)",batch:"MMA-B4",city:"Malappuram, India",coursesEnrolled:["Modern Marketing Architect (MMA)"],status:"Paused",onboarded:"2026-04-22",counsellor:"Chachu",salesPerson:"Chachu"},
+  {id:"STU-08",name:"Vishnu Sagar",course:"WhatsApp Personal Branding (WPB)",batch:"WPB-B2",city:"Kozhikode, India",coursesEnrolled:["WhatsApp Personal Branding (WPB)"],status:"Active",onboarded:"2026-06-05",counsellor:"Safeeda",salesPerson:"Safeeda"},
+  {id:"STU-09",name:"Dilna Basheer",course:"Online Content Creation (OCC)",batch:"OCC-B4",city:"Sharjah, UAE",coursesEnrolled:["Online Content Creation (OCC)"],status:"Dropped",onboarded:"2024-09-12",counsellor:"Chachu",salesPerson:"Chachu"},
+  {id:"STU-10",name:"Mohammed Anas",course:"AI Video Editing (AIVE)",batch:"AIVE-B1",city:"Doha, Qatar",coursesEnrolled:["Modern Marketing Architect (MMA)","AI Video Editing (AIVE)"],status:"Active",onboarded:"2026-01-29",counsellor:"Safeeda",salesPerson:"Safeeda"},
+];
 const studentById = id => students.find(c=>c.id===id);
 function studentCell(id){ const c=studentById(id); if(!c) return "—"; return `<div><div style="font-weight:700;font-size:13px;">${esc(c.name)}</div>${c.city?`<div class="subtext">${esc(c.city)}</div>`:''}</div>`; }
 function studentStatusKind(s){ return {Active:"pos",Paused:"warn",Completed:"blue",Dropped:"neg"}[s] || "neutral"; }
@@ -893,7 +1003,9 @@ function studentStatusKind(s){ return {Active:"pos",Paused:"warn",Completed:"blu
 // studentPortalPage()) — unlike the staff/HR complaints above, these are tied to the student who
 // raised them (studentId) so Admissions can follow up, and are reviewed from Admissions > Complaints.
 const STUDENT_COMPLAINT_CATEGORIES = ["Trainer / Teaching","Batch Schedule","Fee / Payment","Course Material","Facilities","Other"];
-let studentComplaints = [];
+let studentComplaints = [
+  {id:"SCMP-01", studentId:"STU-03", category:"Batch Schedule", text:"Could the WPB session timing be moved 30 minutes later? A few of us are still finishing work at that time.", submitted:"2026-09-05", status:"Reviewed", note:"Discussed with trainer — session moved to 7:30 PM from next week."},
+];
 function studentComplaintsOf(studentId){ return studentComplaints.filter(c=>c.studentId===studentId); }
 
 /* ===================== BATCHES =====================
@@ -902,7 +1014,30 @@ function studentComplaintsOf(studentId){ return studentComplaints.filter(c=>c.st
    (see generateFeeInvoices()). Every course here is installment-based: each installment is a fixed ₹
    amount due on a specific calendar date, set once for the whole batch, so every student in it is on
    the same schedule — there's no separate "full payment" plan to choose. */
-let batches = [];
+let batches = [
+  {id:"MMA-B3", course:"Modern Marketing Architect (MMA)", label:"MMA — Batch 3", startDate:"2025-12-01", schedule:{installments:[{label:"Registration",amount:27500,dueDate:"2025-12-01"},{label:"Final Installment",amount:27500,dueDate:"2026-01-01"}]}},
+  {id:"MMA-B4", course:"Modern Marketing Architect (MMA)", label:"MMA — Batch 4", startDate:"2026-07-05", schedule:{installments:[{label:"Registration",amount:22000,dueDate:"2026-07-05"},{label:"Installment 2",amount:16500,dueDate:"2026-08-04"},{label:"Final Installment",amount:16500,dueDate:"2026-09-03"}]}, calendar:[
+    {id:"SESS-001", date:"2026-09-08", trainerType:"staff", trainerName:"Vaishnav P", topic:"Positioning & brand architecture fundamentals"},
+    {id:"SESS-002", date:"2026-09-15", trainerType:"staff", trainerName:"Vaishnav P", topic:"Customer research and ICP mapping"},
+    {id:"SESS-003", date:"2026-09-22", trainerType:"guest", trainerName:"Ramesh Iyer (Brand Consultant)", topic:"Case study — repositioning a D2C brand"},
+    {id:"SESS-004", date:"2026-09-29", trainerType:"staff", trainerName:"Naseef Rahman", topic:"Go-to-market planning, Phase 2 kickoff"},
+  ]},
+  {id:"OCC-B4", course:"Online Content Creation (OCC)", label:"OCC — Batch 4", startDate:"2024-08-01", schedule:{installments:[{label:"Registration",amount:17500,dueDate:"2024-08-01"},{label:"Final Installment",amount:17500,dueDate:"2024-09-01"}]}},
+  {id:"OCC-B5", course:"Online Content Creation (OCC)", label:"OCC — Batch 5", startDate:"2026-04-20", schedule:{installments:[{label:"Registration",amount:17500,dueDate:"2026-04-20"},{label:"Final Installment",amount:17500,dueDate:"2026-05-20"}]}},
+  {id:"OCC-B6", course:"Online Content Creation (OCC)", label:"OCC — Batch 6", startDate:"2026-07-20", schedule:{installments:[{label:"Registration",amount:17500,dueDate:"2026-07-20"},{label:"Final Installment",amount:17500,dueDate:"2026-08-20"}]}, calendar:[
+    {id:"SESS-009", date:"2026-09-01", trainerType:"staff", trainerName:"Anu", topic:"Content pillars & platform strategy"},
+    {id:"SESS-010", date:"2026-09-08", trainerType:"staff", trainerName:"Anu", topic:"Shooting workflow and gear setup"},
+    {id:"SESS-011", date:"2026-09-15", trainerType:"staff", trainerName:"Anu", topic:"Editing fundamentals — CapCut & Premiere"},
+    {id:"SESS-012", date:"2026-09-22", trainerType:"staff", trainerName:"Anu", topic:"Publishing cadence & analytics"},
+  ]},
+  {id:"WPB-B2", course:"WhatsApp Personal Branding (WPB)", label:"WPB — Batch 2", startDate:"2025-11-01", schedule:{installments:[{label:"Registration",amount:15000,dueDate:"2025-11-01"},{label:"Final Installment",amount:15000,dueDate:"2025-12-01"}]}},
+  {id:"AIVE-B1", course:"AI Video Editing (AIVE)", label:"AIVE — Batch 1", startDate:"2026-09-10", schedule:{installments:[{label:"Registration",amount:20000,dueDate:"2026-09-10"},{label:"Final Installment",amount:20000,dueDate:"2026-10-10"}]}, calendar:[
+    {id:"SESS-005", date:"2026-09-10", trainerType:"staff", trainerName:"Roshan", topic:"Orientation — AI video tools landscape"},
+    {id:"SESS-006", date:"2026-09-17", trainerType:"staff", trainerName:"Roshan", topic:"Prompt-to-video workflows"},
+    {id:"SESS-008", date:"2026-09-05", trainerType:"staff", trainerName:"Fahad Ali", topic:"Hands-on lab — voice cloning tools"},
+    {id:"SESS-007", date:"2026-09-13", trainerType:"staff", trainerName:"Fahad Ali", topic:"Voice cloning and lip-sync editing (hands-on lab)"},
+  ]},
+];
 const batchById = id => batches.find(b=>b.id===id);
 function batchesOf(course){ return batches.filter(b=>b.course===course).slice().sort((a,b)=>b.startDate.localeCompare(a.startDate)); }
 function batchStudents(batchId){ return students.filter(s=>s.batchId===batchId); }
@@ -1048,7 +1183,12 @@ function removeCalendarSession(batchId, sessionId){
 // same thing plus the hours they spent — that submission goes to HR as "Pending"; only once HR
 // Approves it do those hours count toward that month's payroll (see approvedHoursFor() and its use in
 // openAddPayrollEntry()). Rejected hours never count, and can be corrected and resubmitted.
-let sessionLogs = [];
+let sessionLogs = [
+  {id:"SLOG-01", batchId:"AIVE-B1", calSessionId:"SESS-008", empId:"EMP-117", trainerName:"Fahad Ali", date:"2026-09-05", topic:"Hands-on lab — voice cloning tools", notes:"Covered voice cloning tools end to end; students paired up for hands-on practice.", hours:2, status:"Approved", submittedDate:"2026-09-05", approvedBy:"Reshma Beegum", approvedDate:"2026-09-06"},
+  {id:"SLOG-02", batchId:"AIVE-B1", calSessionId:"SESS-007", empId:"EMP-117", trainerName:"Fahad Ali", date:"2026-09-13", topic:"Voice cloning and lip-sync editing (hands-on lab)", notes:"Ran slightly long — extra Q&A on lip-sync edge cases.", hours:2.5, status:"Pending", submittedDate:"2026-09-13"},
+  {id:"SLOG-03", batchId:"AIVE-B1", calSessionId:"SESS-005", empId:"EMP-105", trainerName:"Roshan", date:"2026-09-10", topic:"Orientation — AI video tools landscape", notes:"", hours:1.5, status:"Logged", submittedDate:"2026-09-10"},
+  {id:"SLOG-04", batchId:"OCC-B6", calSessionId:"SESS-009", empId:"EMP-104", trainerName:"Anu", date:"2026-09-01", topic:"Content pillars & platform strategy", notes:"", hours:2, status:"Logged", submittedDate:"2026-09-01"},
+];
 function isGuestTrainer(emp){ return !!(emp && emp.empType==='Guest Trainer'); }
 function sessionLogsOf(empId){ return sessionLogs.filter(l=>l.empId===empId); }
 // Every academic-calendar session assigned (by name) to a staff trainer, across every batch — a
@@ -1151,12 +1291,24 @@ function generateFeeInvoices(student, batch){
 students.forEach(s=>{ if(s.batch && batchById(s.batch)) s.batchId = s.batch; });
 
 /* ===================== MATERIALS ===================== */
-let materials = [];
+let materials = [
+  {id:"MAT-01", course:"Modern Marketing Architect (MMA)", title:"MMA — Course Handbook", type:"PDF", url:"", addedDate:"2026-07-01"},
+  {id:"MAT-02", course:"Modern Marketing Architect (MMA)", title:"Week 1 — Marketing Fundamentals (Recording)", type:"Video", url:"", addedDate:"2026-07-06"},
+  {id:"MAT-03", course:"Online Content Creation (OCC)", title:"OCC — Shot List Templates", type:"Doc", url:"", addedDate:"2026-04-22"},
+  {id:"MAT-04", course:"Online Content Creation (OCC)", title:"Editing Workflow Guide", type:"Link", url:"", addedDate:"2026-05-01"},
+  {id:"MAT-05", course:"WhatsApp Personal Branding (WPB)", title:"WPB — Broadcast List Playbook", type:"PDF", url:"", addedDate:"2025-11-05"},
+  {id:"MAT-06", course:"AI Video Editing (AIVE)", title:"AIVE — Tool Setup Guide (Runway, CapCut)", type:"Doc", url:"", addedDate:"2026-09-11"},
+];
 let materialsNextId = 7;
 function materialsOf(course){ return materials.filter(m=>m.course===course).slice().sort((a,b)=>b.addedDate.localeCompare(a.addedDate)); }
 
 /* ===================== ASSIGNMENTS ===================== */
-let assignments = [];
+let assignments = [
+  {id:"ASG-01", course:"Modern Marketing Architect (MMA)", batchId:"MMA-B4", title:"Positioning Brief — Pick a Brand", type:"Assignment", dueDate:"2026-09-25", maxScore:20, description:"Write a one-page positioning brief for a brand of your choice."},
+  {id:"ASG-02", course:"Online Content Creation (OCC)", batchId:"OCC-B6", title:"Reel Script + Shot List", type:"Assignment", dueDate:"2026-09-27", maxScore:15, description:"Script and shot-list a 30-second reel."},
+  {id:"ASG-03", course:"WhatsApp Personal Branding (WPB)", batchId:"WPB-B2", title:"Broadcast List Setup", type:"Assignment", dueDate:"2026-09-10", maxScore:10, description:"Set up a segmented broadcast list and share screenshots."},
+  {id:"ASG-04", course:"Modern Marketing Architect (MMA)", batchId:"MMA-B4", title:"Phase 1 Final Exam", type:"Exam", dueDate:"2026-09-20", maxScore:50, description:"Closed-book assessment covering positioning, channel strategy and briefs."},
+];
 let assignmentsNextId = 5;
 let submissions = [];
 function assignmentsOf(course){ return assignments.filter(a=>a.course===course).slice().sort((a,b)=>b.dueDate.localeCompare(a.dueDate)); }
@@ -1172,6 +1324,19 @@ function ensureSubmissionsForAssignment(a){
   });
 }
 assignments.forEach(ensureSubmissionsForAssignment);
+// A little realism in the seed data — a few submissions already in progress.
+(function seedSubmissions(){
+  const grade = (studentId, assignmentId, status, score)=>{ const s = submissionFor(assignmentId, studentId); if(s){ s.status=status; s.score=score; s.submittedDate = status!=="Not submitted" ? "2026-09-14" : null; } };
+  grade("STU-01","ASG-01","Graded",17);
+  grade("STU-07","ASG-01","Submitted",null);
+  grade("STU-06","ASG-02","Not submitted",null);
+  grade("STU-02","ASG-02","Graded",13);
+  grade("STU-09","ASG-02","Graded",10);
+  grade("STU-03","ASG-03","Graded",9);
+  grade("STU-08","ASG-03","Graded",8);
+  grade("STU-01","ASG-04","Graded",41);
+  grade("STU-07","ASG-04","Graded",33);
+})();
 
 /* ===================== STUDENT ATTENDANCE ===================== */
 const ATT_CYCLE = ["Present","Present","Present","Absent","Present","Leave","Present","Present","Present","Present"];
@@ -1222,15 +1387,34 @@ const PLATFORMS = [
   {key:'Instagram', icon:'i-instagram'}, {key:'LinkedIn', icon:'i-linkedin'},
   {key:'YouTube', icon:'i-youtube'}, {key:'Facebook', icon:'i-facebook'}, {key:'Blog', icon:'i-globe'},
 ];
-const CONTENT_TEAM = [];
+const CONTENT_TEAM = ['Amina Farook','Rishab K','Jithin Das','Risvan'];
 
-let contentItems = [];
+let contentItems = [
+  {id:1,title:'5 AI tools every content creator needs',type:'Reel',platforms:['Instagram'],assignee:'',stage:'Idea',due:'2026-09-19',notes:''},
+  {id:2,title:'MMA batch 4 — what a live session actually looks like',type:'Post',platforms:['Instagram','Facebook'],assignee:'',stage:'Idea',due:'2026-09-20',notes:''},
+  {id:3,title:'SEO blog: how to pick a content marketing course',type:'Blog Post',platforms:['Blog'],assignee:'',stage:'Idea',due:'2026-09-24',notes:''},
+  {id:4,title:'A day at Demand School — campus + trainers reel',type:'Reel',platforms:['Instagram'],assignee:'Jithin Das',stage:'Scripting',due:'2026-09-17',notes:''},
+  {id:5,title:'Student results carousel — OCC batch 4 placements',type:'Carousel',platforms:['Instagram','LinkedIn'],assignee:'Amina Farook',stage:'Scripting',due:'2026-09-16',notes:''},
+  {id:6,title:'AIVE — course walkthrough video',type:'YouTube Video',platforms:['YouTube'],assignee:'Jithin Das',stage:'Production',due:'2026-09-15',notes:''},
+  {id:7,title:'Behind the scenes — HiLITE classroom shoot day',type:'Reel',platforms:['Instagram'],assignee:'Jithin Das',stage:'Production',due:'2026-09-14',notes:''},
+  {id:8,title:'Student testimonial carousel — WPB batch 2',type:'Carousel',platforms:['Instagram','LinkedIn'],assignee:'Risvan',stage:'Review',due:'2026-09-13',notes:''},
+  {id:9,title:'Demand School — trainer spotlight, Anu',type:'Post',platforms:['LinkedIn'],assignee:'Risvan',stage:'Review',due:'2026-09-12',notes:''},
+  {id:10,title:'Demand School — October enrollment push',type:'Carousel',platforms:['Instagram'],assignee:'Amina Farook',stage:'Scheduled',due:'2026-09-17',notes:''},
+  {id:11,title:'Demand School — Onam greetings post',type:'Post',platforms:['Instagram','Facebook'],assignee:'Rishab K',stage:'Published',due:'2026-09-06',notes:''},
+  {id:12,title:'MMA results reel — student before/after case study',type:'Reel',platforms:['Instagram'],assignee:'Jithin Das',stage:'Published',due:'2026-09-04',notes:''},
+];
 let contentNextId = 100;
 let contentPlatformFilter = 'All';
 
 // Demand School's own Meta (Facebook/Instagram) ad campaigns — lead gen for course enrollment across
 // MMA, OCC, WPB and AIVE. Not student ad accounts — Demand School runs no ad accounts for anyone else.
-let metaAdsCampaigns = [];
+let metaAdsCampaigns = [
+  {id:"AD-01",name:"MMA — Lead Gen",objective:"Lead Generation",platform:"Instagram + Facebook",status:"Active",spend:18500,impressions:214000,clicks:3120,leads:42,startDate:"2026-09-01"},
+  {id:"AD-02",name:"OCC — Lead Gen",objective:"Lead Generation",platform:"Instagram + Facebook",status:"Active",spend:22000,impressions:265000,clicks:3840,leads:31,startDate:"2026-09-01"},
+  {id:"AD-03",name:"WPB — Lead Gen",objective:"Lead Generation",platform:"Facebook",status:"Active",spend:15000,impressions:158000,clicks:2260,leads:19,startDate:"2026-09-05"},
+  {id:"AD-04",name:"AIVE — Launch Enrollment",objective:"Conversions",platform:"Instagram",status:"Active",spend:12000,impressions:196000,clicks:2940,leads:58,startDate:"2026-08-20"},
+  {id:"AD-05",name:"MMA — Retargeting",objective:"Retargeting",platform:"Instagram",status:"Paused",spend:4200,impressions:41000,clicks:610,leads:6,startDate:"2026-08-10"},
+];
 function adMetrics(c){
   const ctr = c.impressions ? (c.clicks/c.impressions*100) : 0;
   const cpc = c.clicks ? c.spend/c.clicks : 0;
@@ -1242,7 +1426,16 @@ function adMetrics(c){
 // "Instagram" / "WhatsApp" = organic leads who filled our own form there — nobody's touched these
 // yet, so they come in with no leadOwner (see below) and sit in "Open leads" until Sales claims one.
 const LEAD_SOURCES = ["Meta","Instagram","WhatsApp","Organic","References"];
-let marketingLeads = [];
+let marketingLeads = [
+  {id:"MLD-01",name:"Farhana Basheer",phone:"9847112233",email:"farhana.b@gmail.com",source:"References",courseInterested:"Modern Marketing Architect (MMA)",leadOwner:"Chachu",createdDate:"2026-09-12"},
+  {id:"MLD-02",name:"Rahul Vinod",phone:"9847223344",email:"rahul.vinod@gmail.com",source:"Meta",courseInterested:"AI Video Editing (AIVE)",leadOwner:"Safeeda",createdDate:"2026-09-08"},
+  {id:"MLD-03",name:"Sneha Pillai",phone:"9847334455",email:"sneha.pillai@gmail.com",source:"Organic",courseInterested:"Online Content Creation (OCC)",leadOwner:"Chachu",createdDate:"2026-09-02"},
+  {id:"MLD-04",name:"Abdul Rahman",phone:"+974 3312 4455",email:"abdul.rahman@gmail.com",source:"References",courseInterested:"Modern Marketing Architect (MMA)",leadOwner:"Safeeda",createdDate:"2026-08-25"},
+  {id:"MLD-05",name:"Meera Thomas",phone:"9847445566",email:"meera.thomas@gmail.com",source:"Organic",courseInterested:"WhatsApp Personal Branding (WPB)",leadOwner:"Chachu",createdDate:"2026-08-10"},
+  {id:"MLD-06",name:"Faisal Ahmed",phone:"9847556677",email:"faisal.ahmed@gmail.com",source:"Meta",courseInterested:"AI Video Editing (AIVE)",leadOwner:"Safeeda",createdDate:"2026-08-05"},
+  {id:"MLD-07",name:"Anagha Vijayan",phone:"9847667788",email:"anagha.v@gmail.com",source:"Instagram",courseInterested:"Online Content Creation (OCC)",leadOwner:null,createdDate:"2026-09-13"},
+  {id:"MLD-08",name:"Sinan Muhammed",phone:"9847778899",email:"sinan.m@gmail.com",source:"WhatsApp",courseInterested:"WhatsApp Personal Branding (WPB)",leadOwner:null,createdDate:"2026-09-14"},
+];
 
 /* ===================== QUOTES =====================
    Sales lifecycle: Sales creates a quote for an existing student OR a lead (Draft), possibly quoting
@@ -1253,7 +1446,13 @@ let marketingLeads = [];
    Receipts, which creates (or tops up) the real invoice and posts to the bank ledger. Approving a lead's first payment
    also turns that lead into a student automatically, if they aren't one already. A quote only reaches
    Invoiced once its full total has been approved; a partially-approved quote stays Submitted to Finance. */
-let quotes = [];
+let quotes = [
+  {id:"QUO-01",studentId:"STU-03",leadId:null,items:[{dept:"WhatsApp Personal Branding (WPB)",amount:22000}],title:"WPB — Batch 3 fee (renewal)",createdBy:"Chachu",createdDate:"2026-09-14",status:"Draft",payments:[]},
+  {id:"QUO-02",studentId:"STU-09",leadId:null,items:[{dept:"Online Content Creation (OCC)",amount:30000}],title:"OCC — Re-enrollment package",createdBy:"Safeeda",createdDate:"2026-09-10",status:"Sent",sentDate:"2026-09-11",payments:[]},
+  {id:"QUO-03",studentId:"STU-07",leadId:null,items:[{dept:"Modern Marketing Architect (MMA)",amount:12000},{dept:"Modern Marketing Architect (MMA)",amount:6000}],title:"MMA — Phase 2 balance + material fee",createdBy:"Chachu",createdDate:"2026-09-05",status:"Submitted to Finance",sentDate:"2026-09-06",payments:[{amount:18000,date:"2026-09-12",note:"Student paid via UPI, ref UTR8827311",approved:false}],invoiceId:null},
+  {id:"QUO-04",studentId:"STU-10",leadId:null,items:[{dept:"AI Video Editing (AIVE)",amount:25000}],title:"AIVE — Add-on enrollment",createdBy:"Safeeda",createdDate:"2026-08-20",status:"Invoiced",sentDate:"2026-08-21",payments:[{amount:25000,date:"2026-08-25",note:"Paid in full via bank transfer",approved:true,approvedDate:"2026-08-25"}],invoiceId:"INV-1049"},
+  {id:"QUO-05",studentId:null,leadId:"MLD-02",items:[{dept:"AI Video Editing (AIVE)",amount:35000}],title:"AIVE — New Enrollment Package",createdBy:"Safeeda",createdDate:"2026-09-13",status:"Submitted to Finance",sentDate:"2026-09-13",payments:[{amount:15000,date:"2026-09-14",note:"Advance paid via UPI — balance on delivery",approved:false}],invoiceId:null},
+];
 function quoteStatusKind(s){ return {Draft:"neutral",Sent:"blue","Submitted to Finance":"warn",Invoiced:"pos",Lost:"neg"}[s] || "neutral"; }
 function leadById(id){ return marketingLeads.find(l=>l.id===id); }
 function quoteTotal(q){ return q.items.reduce((s,i)=>s+i.amount,0); }
@@ -1266,7 +1465,18 @@ function quoteBalance(q){ return Math.max(0, quoteTotal(q) - quoteApprovedPaid(q
 // Every touchpoint with a student is tracked directly against them — no separate "Project" layer.
 // Every follow-up/task for a student shows up on their one Follow-ups board (see
 // renderStudentTaskBoard()), so there's nowhere else to look for "what have we done for this student".
-let studentTasks = [];
+let studentTasks = [
+  {id:"TSK-01",studentId:"STU-01",title:"Collect Phase 2 material fee",assignedTo:"Chachu",due:"2026-09-16",status:"In Progress",revisions:1},
+  {id:"TSK-02",studentId:"STU-01",title:"Share MMA batch 4 session recording",assignedTo:"Vaishnav P",due:"2026-09-19",status:"To Do",revisions:0},
+  {id:"TSK-03",studentId:"STU-02",title:"Portfolio review — round 2",assignedTo:"Anu",due:"2026-09-16",status:"Review",revisions:2},
+  {id:"TSK-04",studentId:"STU-02",title:"Placement prep — resume review",assignedTo:"Anu",due:"2026-09-18",status:"In Progress",revisions:1},
+  {id:"TSK-05",studentId:"STU-03",title:"WPB assessment scheduling call",assignedTo:"Chachu",due:"2026-09-20",status:"In Progress",revisions:0},
+  {id:"TSK-06",studentId:"STU-04",title:"Certificate & completion follow-up",assignedTo:"Sudheer Nair",due:"2026-09-13",status:"Review",revisions:1},
+  {id:"TSK-07",studentId:"STU-04",title:"Alumni placement check-in call",assignedTo:"Fathima K",due:"2026-09-12",status:"Done",doneDate:"2026-09-12",revisions:0},
+  {id:"TSK-08",studentId:"STU-05",title:"Installment 2 reminder call",assignedTo:"Chachu",due:"2026-09-17",status:"In Progress",revisions:0},
+  {id:"TSK-09",studentId:"STU-08",title:"Batch reschedule — WPB session 6",assignedTo:"Safeeda",due:"2026-09-16",status:"To Do",revisions:0},
+  {id:"TSK-10",studentId:"STU-10",title:"AIVE onboarding call & material access",assignedTo:"Roshan",due:"2026-09-16",status:"To Do",revisions:0},
+];
 function tasksOf(studentId){ return studentTasks.filter(t=>t.studentId===studentId); }
 // Month-wise filter for a student's own Follow-ups board, keyed per student so switching between
 // students never leaks one student's selected month onto another's board. Filters by each task's Due date.
@@ -1313,7 +1523,25 @@ function setBatchTaskBoardMonthFilter(batchId, v){ batchTaskBoardMonthFilter[bat
 // in) rather than a single Paid/Pending flag — see invoicePaid()/invoiceBalance()/invoiceStatus().
 // Like quotes, an invoice can bundle several services each priced independently — items:[{dept,amount}]
 // — and its total is always the sum of those (see invoiceTotal()); there's no single "amount" field.
-let invoices = [];
+let invoices = [
+  // STU-01 (MMA-B4, Installments) — one invoice per installment on that batch's own schedule:
+  // Registration and Installment 2 already settled, Final Installment now overdue (see TSK-01).
+  {id:"INV-1041",studentId:"STU-01",items:[{dept:"Modern Marketing Architect (MMA)",amount:22000}],invoiceNo:"DS-2026-1041",issued:"2026-07-05",due:"2026-07-05",scheduleLabel:"Registration",payments:[{amount:22000,date:"2026-07-06",accountId:"BANK-01",note:"Registration fee received"}]},
+  // STU-05 (OCC-B5, Installments) — Registration settled, Final Installment overdue (see TSK-08).
+  {id:"INV-1042",studentId:"STU-05",items:[{dept:"Online Content Creation (OCC)",amount:17500}],invoiceNo:"DS-2026-1042",issued:"2026-04-20",due:"2026-04-20",scheduleLabel:"Registration",payments:[{amount:17500,date:"2026-04-21",accountId:"BANK-01",note:"Registration fee received"}]},
+  {id:"INV-1043",studentId:"STU-08",items:[{dept:"WhatsApp Personal Branding (WPB)",amount:32000}],invoiceNo:"DS-2026-1043",issued:"2026-09-01",due:"2026-09-15",payments:[{amount:15000,date:"2026-09-08",accountId:"BANK-02",note:"Partial payment received"}]},
+  // STU-03 (WPB-B2, Installments) — Registration settled, Final Installment only partially paid.
+  {id:"INV-1044",studentId:"STU-03",items:[{dept:"WhatsApp Personal Branding (WPB)",amount:15000}],invoiceNo:"DS-2026-1044",issued:"2025-11-01",due:"2025-11-01",scheduleLabel:"Registration",payments:[{amount:15000,date:"2025-11-02",accountId:"BANK-02",note:"Registration fee received"}]},
+  {id:"INV-1045",studentId:"STU-02",items:[{dept:"Online Content Creation (OCC)",amount:35000}],invoiceNo:"DS-2026-1045",issued:"2026-08-01",due:"2026-08-15",payments:[{amount:35000,date:"2026-08-12",accountId:"BANK-01",note:"Full settlement"}]},
+  {id:"INV-1046",studentId:"STU-04",items:[{dept:"Modern Marketing Architect (MMA)",amount:60000}],invoiceNo:"DS-2026-1046",issued:"2026-08-05",due:"2026-09-05",payments:[{amount:60000,date:"2026-09-03",accountId:"BANK-02",note:"Full settlement"}]},
+  {id:"INV-1047",studentId:"STU-10",items:[{dept:"AI Video Editing (AIVE)",amount:40000}],invoiceNo:"DS-2026-1047",issued:"2026-09-10",due:"2026-09-24",payments:[]},
+  {id:"INV-1048",studentId:"STU-07",items:[{dept:"Modern Marketing Architect (MMA)",amount:50000}],invoiceNo:"DS-2026-1048",issued:"2026-07-28",due:"2026-08-11",payments:[{amount:50000,date:"2026-08-09",accountId:"BANK-01",note:"Full settlement"}]},
+  {id:"INV-1049",studentId:"STU-10",items:[{dept:"AI Video Editing (AIVE)",amount:25000}],invoiceNo:"DS-2026-1049",issued:"2026-08-25",due:"2026-08-25",payments:[{amount:25000,date:"2026-08-25",accountId:"BANK-01",note:"Quote QUO-04 — payment confirmed by Finance"}]},
+  {id:"INV-1050",studentId:"STU-01",items:[{dept:"Modern Marketing Architect (MMA)",amount:16500}],invoiceNo:"DS-2026-1050",issued:"2026-08-04",due:"2026-08-04",scheduleLabel:"Installment 2",payments:[{amount:16500,date:"2026-08-06",accountId:"BANK-01",note:"Installment 2 received"}]},
+  {id:"INV-1051",studentId:"STU-01",items:[{dept:"Modern Marketing Architect (MMA)",amount:16500}],invoiceNo:"DS-2026-1051",issued:"2026-09-03",due:"2026-09-03",scheduleLabel:"Final Installment",payments:[]},
+  {id:"INV-1052",studentId:"STU-03",items:[{dept:"WhatsApp Personal Branding (WPB)",amount:15000}],invoiceNo:"DS-2026-1052",issued:"2025-12-01",due:"2025-12-01",scheduleLabel:"Final Installment",payments:[{amount:9000,date:"2025-12-03",accountId:"BANK-02",note:"Partial payment received"}]},
+  {id:"INV-1053",studentId:"STU-05",items:[{dept:"Online Content Creation (OCC)",amount:17500}],invoiceNo:"DS-2026-1053",issued:"2026-05-20",due:"2026-05-20",scheduleLabel:"Final Installment",payments:[]},
+];
 function invoiceTotal(inv){ return (inv.items||[]).reduce((s,i)=>s+i.amount,0); }
 function invoicePaid(inv, asOf){ return (inv.payments||[]).filter(p=>!asOf||p.date<=asOf).reduce((s,p)=>s+p.amount,0); }
 function invoiceBalance(inv, asOf){ return Math.max(0, invoiceTotal(inv) - invoicePaid(inv, asOf)); }
@@ -1335,7 +1563,20 @@ const invStatusKind = s => ({Paid:"pos","Partially Paid":"warn",Pending:"warn",O
 // liability account (see liabilityAccountFor()): the expense is recognized in P&L for the month it's
 // due regardless of when it's paid, so recording a payment here only moves cash and pays down the
 // liability — it never re-expenses anything.
-let payables = [];
+let payables = [
+  {id:"PAY-01",category:"Salary",payee:"Team payroll — September",amount:611000,due:"2026-09-30",payments:[]},
+  {id:"PAY-02",category:"Rent",payee:"HiLITE Business Park — classroom & office lease",amount:85000,due:"2026-09-05",payments:[{amount:85000,date:"2026-09-05",accountId:"BANK-01",note:"Full settlement"}]},
+  {id:"PAY-03",category:"Commission",payee:"Safeeda — Q3 new admissions",amount:12000,due:"2026-09-20",payments:[]},
+  {id:"PAY-04",category:"Internal Loan",payee:"Founders' working-capital advance",amount:150000,due:"2026-10-15",payments:[]},
+  {id:"PAY-05",category:"Vendor",payee:"Adobe Creative Cloud — team licenses",amount:18500,due:"2026-09-18",payments:[{amount:10000,date:"2026-09-14",accountId:"BANK-01",note:"Partial payment"}]},
+  {id:"PAY-06",category:"Vendor",payee:"Meta Ads — enrollment campaign billing",amount:64000,due:"2026-09-12",payments:[{amount:64000,date:"2026-09-12",accountId:"BANK-02",note:"Full settlement"}]},
+  // Sales-commission examples (pre-existing seed history, tagged with salesPerson) so the sales
+  // team's own Commission/Leaderboard tabs open with realistic, non-zero figures — tied to the actual
+  // seeded invoices/students above rather than invented numbers.
+  {id:"PAY-07",category:"Commission",payee:"Chachu — commission on INV-1041 (Ayesha Fathima)",salesPerson:"Chachu",amount:4500,due:"2026-09-08",payments:[{amount:4500,date:"2026-09-08",accountId:"BANK-01",note:"Full settlement"}]},
+  {id:"PAY-08",category:"Commission",payee:"Chachu — commission on INV-1042 (Fathimath Nashwa)",salesPerson:"Chachu",amount:3300,due:"2026-09-11",payments:[]},
+  {id:"PAY-09",category:"Commission",payee:"Safeeda — commission on INV-1043 (Vishnu Sagar)",salesPerson:"Safeeda",amount:3200,due:"2026-09-16",payments:[{amount:1500,date:"2026-09-14",accountId:"BANK-01",note:"Partial payout"}]},
+];
 const CLEAR_ORDER = ["Salary","Rent","Commission","Internal Loan","Vendor"];
 function payablePaid(p, asOf){ return (p.payments||[]).filter(pm=>!asOf||pm.date<=asOf).reduce((s,pm)=>s+pm.amount,0); }
 function payableBalance(p, asOf){ return Math.max(0, p.amount - payablePaid(p, asOf)); }
@@ -1469,13 +1710,23 @@ function decideCommissionWithdrawalReject(id){
 // dept is optional: set it when an expense is directly attributable to one department (reduces that
 // department's profit directly); leave it unset for shared/office costs (pooled into overhead and
 // split across departments by headcount — see deptProfitability()).
-let expenses = [];
+let expenses = [
+  {id:"EXP-01",category:"Software",description:"Canva Pro + Adobe CC renewal",amount:18500,date:"2026-09-03",accountId:"BANK-01",dept:""},
+  {id:"EXP-02",category:"Equipment",description:"Ring light + tripod for shoot desk",amount:6200,date:"2026-09-06",accountId:"BANK-03",dept:"Production"},
+  {id:"EXP-03",category:"Travel",description:"Student site visit — Doha (Qatar Fresh Mart)",amount:24500,date:"2026-08-28",accountId:"BANK-01",dept:"Performance Marketing"},
+  {id:"EXP-04",category:"Utilities",description:"Internet + office electricity — September",amount:9800,date:"2026-09-05",accountId:"BANK-01",dept:""},
+  {id:"EXP-05",category:"Misc",description:"Team lunch — MMA batch wrap",amount:4200,date:"2026-09-10",accountId:"BANK-03",dept:""},
+];
 
 /* ---- Banks ---- */
 // bankTransactions is the single source of truth for cash movement — an account's balance is always
 // derived (opening balance + credits − debits, optionally as-of a date), never stored, so it can never
 // drift out of sync with the invoices/payables/expenses/transfers that produced it.
-let bankAccounts = [];
+let bankAccounts = [
+  {id:"BANK-01",name:"Federal Bank — Current A/c",bank:"Federal Bank",number:"•••• 4821",opening:250000,openedOn:"2026-01-01"},
+  {id:"BANK-02",name:"HDFC Bank — Current A/c",bank:"HDFC Bank",number:"•••• 7734",opening:120000,openedOn:"2026-01-01"},
+  {id:"BANK-03",name:"Cash in Hand",bank:"Cash",number:"—",opening:15000,openedOn:"2026-01-01"},
+];
 const bankById = id => bankAccounts.find(b=>b.id===id);
 let bankTransactions = [];
 function pushBankTxn(accountId, date, type, amount, note, ref){
@@ -1890,6 +2141,14 @@ function performDeleteReceipt(source, parentId, idx){
   toast("Payment entry deleted"); closeModal(); render();
 }
 
+// ---- seed: turn the historical Paid invoices/payables and logged expenses above into real bank
+// ledger entries, so account balances reconcile with what's already on record ----
+invoices.forEach(inv=>{ (inv.payments||[]).forEach(p=>{ pushBankTxn(p.accountId, p.date, "credit", p.amount, "Invoice "+inv.invoiceNo+" — "+studentById(inv.studentId).name, inv.id); }); });
+payables.forEach(p=>{ (p.payments||[]).forEach(pm=>{ pushBankTxn(pm.accountId, pm.date, "debit", pm.amount, p.category+" — "+p.payee, p.id); }); });
+expenses.forEach(e=>{ pushBankTxn(e.accountId, e.date, "debit", e.amount, e.category+" — "+e.description, e.id); });
+pushBankTxn("BANK-01", "2026-09-11", "debit", 5000, "Transfer to Cash in Hand — petty cash top-up", null);
+pushBankTxn("BANK-03", "2026-09-11", "credit", 5000, "Transfer from Federal Bank — Current A/c — petty cash top-up", null);
+
 /* ===================== JOURNAL ===================== */
 // A manual general-journal entry: freeform debit/credit lines against Chart-of-Accounts accounts (or a
 // real bank account, for entries that also move actual cash) — for anything the structured forms
@@ -1898,7 +2157,12 @@ function performDeleteReceipt(source, parentId, idx){
 // a bank account posts straight to that account's ledger; everything else flows into Reports the normal
 // way, by account type: Debit increases an Asset or Expense account, Credit increases a Liability,
 // Income or Equity account — see journalAccountBalance()/journalAccountBalanceInMonth().
-let journalEntries = [];
+let journalEntries = [
+  {id:"JRN-01", date:"2026-09-08", memo:"Write off old outstanding balance — Green Leaf Wellness (pre-system, uncollectable)", lines:[
+    {account:"coa:Bad Debts", side:"debit", amount:5000},
+    {account:"coa:Accounts Receivable", side:"credit", amount:5000},
+  ]},
+];
 function journalAccountLabel(value){ return value.startsWith("bank:") ? bankById(value.slice(5)).name : value.slice(4); }
 function journalAccountOptions(selected){
   const bankOpts = bankAccounts.map(b=>`<option value="bank:${b.id}" ${selected==='bank:'+b.id?'selected':''}>${esc(b.name)} (Bank)</option>`);
@@ -4683,6 +4947,8 @@ function courseDetailPage(name){
           <div class="kpi-card hero"><div class="kpi-label">Fee Pending</div><div class="kpi-value mono ${pending>0?'warn':''}" style="font-size:19px;">${inr(pending)}</div></div>
         </div>
         ${cs.description?`<div class="subtext" style="margin:2px 0 16px;">${esc(cs.description)}</div>`:''}
+        <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Syllabus<button class="btn btn-sm ghost" onclick="openEditSyllabus(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>${syllabusOf(name).length?'Edit syllabus':'Add syllabus'}</button></div>
+        ${syllabusListHTML(name)}
         <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Batches<button class="btn btn-sm ghost" onclick="openAddBatch(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Start new batch</button></div>
         ${bList.length?`<div class="table-wrap"><table class="data"><thead><tr><th>Batch</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Schedule</th><th class="num">Students</th><th></th></tr></thead>
           <tbody>${bList.map(b=>`<tr><td style="font-weight:700;">${esc(b.label)}</td><td class="muted">${fmtDate(b.startDate)}</td><td class="muted">${b.endDate?fmtDate(b.endDate):'<span class="faint">—</span>'}</td><td>${pill(batchStatus(b),batchStatusKind(batchStatus(b)))}</td><td class="muted">${batchScheduleLabel(b)}</td><td class="num mono">${batchStudents(b.id).length}</td><td><div style="display:flex;gap:6px;"><button class="btn btn-sm ghost" onclick="openBatchDetail('${b.id}')">View</button><button class="btn btn-sm ghost" onclick="openEditBatch('${b.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></div></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">No batches started for this course yet.</div>`}
@@ -4733,6 +4999,100 @@ function openCourseSettings(name){
     }
     courseSettings[newName] = {price:Number(f.get("price"))||0, duration:f.get("duration"), mode:f.get("mode"), description:f.get("description")};
     toast("Course settings saved"); closeModal(); render();
+  });
+}
+// Read-only render of a course's syllabus — an ordered list of modules, each with a title, an optional
+// duration and a bullet list of topics. Used on the Course detail page (staff) and, unmodified, on the
+// student portal's own Syllabus tab, so both sides see exactly the same curriculum outline.
+function syllabusListHTML(name){
+  const mods = syllabusOf(name);
+  if(!mods.length) return `<div class="empty">No syllabus added for this course yet.</div>`;
+  return `<div class="stack" style="gap:10px;">${mods.map((m,idx)=>`
+    <div class="panel" style="box-shadow:none;">
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div style="font-weight:800;font-size:13.5px;">Module ${idx+1}: ${esc(m.title||'Untitled module')}</div>
+          ${m.duration?`<span class="pill neutral">${esc(m.duration)}</span>`:''}
+        </div>
+        ${m.topics?`<ul style="margin:2px 0 0 18px;padding:0;color:var(--ink-soft);font-size:12.5px;line-height:1.7;">${String(m.topics).split("\n").map(t=>t.trim()).filter(Boolean).map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:''}
+      </div>
+    </div>`).join("")}</div>`;
+}
+// Edit-syllabus modal — same growable/reorderable-rows pattern as the batch installment schedule
+// (courseDraftSyllabus holds the working set; the DOM is read back before each add/remove/move so
+// nothing already typed is lost), plus move-up/move-down since a syllabus's order matters.
+let courseDraftSyllabus = [];
+function readCourseDraftSyllabusFromDOM(){
+  const rows = [];
+  document.querySelectorAll('#syllabus-rows [data-syl-row]').forEach(rowEl=>{
+    const i = rowEl.dataset.sylRow;
+    rows.push({
+      title: (rowEl.querySelector(`[name="sylTitle${i}"]`)||{}).value || "",
+      duration: (rowEl.querySelector(`[name="sylDuration${i}"]`)||{}).value || "",
+      topics: (rowEl.querySelector(`[name="sylTopics${i}"]`)||{}).value || "",
+    });
+  });
+  return rows;
+}
+function syllabusDraftRowsHTML(){
+  return courseDraftSyllabus.map((m,idx)=>{ const i=idx+1; return `
+  <div class="panel" style="box-shadow:none;" data-syl-row="${i}">
+    <div class="panel-body" style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="font-weight:800;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;">Module ${i}</div>
+        <div style="display:flex;gap:4px;">
+          <button type="button" class="btn btn-sm ghost" ${idx===0?'disabled':''} onclick="moveSyllabusRow(${idx},-1)" title="Move up"><svg class="icon" style="width:11px;height:11px"><use href="#i-arrow-up"/></svg></button>
+          <button type="button" class="btn btn-sm ghost" ${idx===courseDraftSyllabus.length-1?'disabled':''} onclick="moveSyllabusRow(${idx},1)" title="Move down"><svg class="icon" style="width:11px;height:11px"><use href="#i-arrow-down"/></svg></button>
+          <button type="button" class="btn btn-sm ghost" onclick="removeSyllabusRow(${idx})" title="Remove module"><svg class="icon" style="width:11px;height:11px"><use href="#i-x"/></svg></button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div><label class="field-label">Title</label><input class="field-input" name="sylTitle${i}" placeholder="e.g. Fundamentals of Content Strategy" value="${esc(String(m.title||''))}"></div>
+        <div><label class="field-label">Duration <span class="faint">(optional)</span></label><input class="field-input" name="sylDuration${i}" placeholder="e.g. 2 sessions / 1 week" value="${esc(String(m.duration||''))}"></div>
+      </div>
+      <div><label class="field-label">Topics covered <span class="faint">(one per line)</span></label><textarea class="field-input" name="sylTopics${i}" rows="3" placeholder="One topic per line">${esc(String(m.topics||''))}</textarea></div>
+    </div>
+  </div>`; }).join("");
+}
+function refreshSyllabusRows(){
+  const el = document.getElementById("syllabus-rows");
+  if(el) el.innerHTML = syllabusDraftRowsHTML();
+}
+function addSyllabusRow(){
+  courseDraftSyllabus = readCourseDraftSyllabusFromDOM();
+  courseDraftSyllabus.push({title:"",duration:"",topics:""});
+  refreshSyllabusRows();
+}
+function removeSyllabusRow(idx){
+  courseDraftSyllabus = readCourseDraftSyllabusFromDOM();
+  courseDraftSyllabus.splice(idx,1);
+  if(!courseDraftSyllabus.length) courseDraftSyllabus.push({title:"",duration:"",topics:""});
+  refreshSyllabusRows();
+}
+function moveSyllabusRow(idx, dir){
+  courseDraftSyllabus = readCourseDraftSyllabusFromDOM();
+  const j = idx+dir;
+  if(j<0 || j>=courseDraftSyllabus.length) return;
+  const tmp = courseDraftSyllabus[idx]; courseDraftSyllabus[idx] = courseDraftSyllabus[j]; courseDraftSyllabus[j] = tmp;
+  refreshSyllabusRows();
+}
+function openEditSyllabus(name){
+  courseDraftSyllabus = syllabusOf(name).map(m=>({...m}));
+  if(!courseDraftSyllabus.length) courseDraftSyllabus.push({title:"",duration:"",topics:""});
+  showModal(`
+    <div class="modal-head"><h3>Syllabus — ${esc(name)}</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <form id="f-edit-syllabus"><div class="modal-body">
+      <div class="subtext">Break the course into modules, in the order students will go through them. Students see this exact list — title, duration and topics — on their own portal. This is separate from a batch's dated Academic Calendar.</div>
+      <div id="syllabus-rows" style="display:flex;flex-direction:column;gap:10px;">${syllabusDraftRowsHTML()}</div>
+      <button type="button" class="btn btn-sm ghost" onclick="addSyllabusRow()" style="align-self:flex-start;"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Add module</button>
+    </div>
+    <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Save syllabus</button></div></div>
+    </form>`, true);
+  document.getElementById("f-edit-syllabus").addEventListener("submit", e=>{
+    e.preventDefault();
+    const rows = readCourseDraftSyllabusFromDOM().filter(m=>m.title && m.title.trim());
+    courseSettings[name] = {...courseSettingsOf(name), syllabus: rows};
+    toast("Syllabus saved"); closeModal(); render();
   });
 }
 function openAddCourse(){
@@ -6752,13 +7112,26 @@ function applyServerValue(key, value){
   }
   replaceInPlace(SYNC_KEYS[key](), value);
 }
+// In-memory ID counters restart on every page load; after real data is loaded they must continue from
+// the highest ID already stored, or a new material/assignment/post could reuse an existing ID.
+function reseedIdCounters(){
+  const maxNum = (arr, re) => arr.reduce((m,x)=>{ const r = re.exec(String(x && x.id)); return r ? Math.max(m, Number(r[1])) : m; }, 0);
+  materialsNextId = Math.max(materialsNextId, maxNum(materials, /^MAT-(\d+)$/) + 1);
+  assignmentsNextId = Math.max(assignmentsNextId, maxNum(assignments, /^ASG-(\d+)$/) + 1);
+  contentNextId = Math.max(contentNextId, maxNum(contentItems, /^(\d+)$/) + 1);
+  batches.forEach(b=>(b.calendar||[]).forEach(s=>{ const r = /^SESS-(\d+)$/.exec(String(s.id)); if(r) calSessionSeq = Math.max(calSessionSeq, Number(r[1])); }));
+}
 function loadServerState(state){
   for(const k of Object.keys(state)){
     if(!SYNC_KEYS[k]) continue;
     applyServerValue(k, state[k].value);
     syncVersions[k] = state[k].version;
   }
-  for(const k of Object.keys(SYNC_KEYS)) syncSnap[k] = JSON.stringify(SYNC_KEYS[k]());
+  // A collection the server has never stored keeps the app's built-in starting data. Mark it unsaved ('')
+  // so the first person allowed to write it uploads it — otherwise the server would have no employee
+  // list to check logins and roles against.
+  for(const k of Object.keys(SYNC_KEYS)) syncSnap[k] = (k in state) ? JSON.stringify(SYNC_KEYS[k]()) : '';
+  reseedIdCounters();
 }
 function rerenderCurrent(){
   if(currentStudent) renderStudentPortal(); else if(currentUser) render();
@@ -6850,10 +7223,19 @@ function applyCurrentUser(emp){
   document.getElementById('topbar-avatar').textContent = ini;
 }
 // Loads this user's data from the server and opens the right shell. Throws if their record is missing.
-async function bootSession(user, writable){
+async function bootSession(user, writable, readable){
   const { state } = await api('state');
   loadServerState(state);
   syncWritable = writable || [];
+  // The page ships with built-in starting data for every collection. For collections this user is not
+  // allowed to read, drop it, so a restricted account never works with (or sees) placeholder records.
+  if(readable){
+    for(const k of Object.keys(SYNC_KEYS)){
+      if(readable.includes(k) || k==='chartOfAccounts') continue;
+      const t = SYNC_KEYS[k]();
+      if(Array.isArray(t)){ replaceInPlace(t, []); syncSnap[k] = '[]'; }
+    }
+  }
   if(user.kind==='student'){
     const s = studentById(user.refId);
     if(!s) throw new Error('Your student record was not found — contact admissions');
@@ -6894,7 +7276,7 @@ async function doLogin(e){
   try{
     const res = await api('login', { method:'POST', body:{ email, password, kind: loginMode } });
     document.getElementById('login-password').value = '';
-    await bootSession(res.user, res.writable);
+    await bootSession(res.user, res.writable, res.readable);
   }catch(err){
     errEl.textContent = err.message; errEl.hidden = false;
   }finally{ btn.disabled = false; }
@@ -6920,6 +7302,7 @@ function applyCurrentStudent(s){
 // one tab's content at a time instead of the old single long scrolling page.
 const STUDENT_NAV = [
   {id:"overview", label:"My Learning", icon:"i-home"},
+  {id:"syllabus", label:"Syllabus", icon:"i-file"},
   {id:"calendar", label:"Academic Calendar", icon:"i-calendar"},
   {id:"fees", label:"My Fees", icon:"i-wallet"},
   {id:"materials", label:"My Materials", icon:"i-paperclip"},
@@ -6941,6 +7324,7 @@ function renderStudentNav(){
 }
 const STUDENT_TAB_TITLES = {
   overview: ["My Learning","Performance and attendance at a glance"],
+  syllabus: ["Syllabus","Modules and topics covered in this course"],
   calendar: ["Academic Calendar","Session-by-session schedule for your batch"],
   fees: ["My Fees","Billing and payment status"],
   materials: ["My Materials","Everything shared for your course"],
@@ -6956,12 +7340,20 @@ function renderStudentPortal(){
 function studentPortalPage(){
   const s = currentStudent;
   if(!s) return '<div class="empty">No student signed in.</div>';
+  if(studentTab==='syllabus') return studentPortalSyllabus(s);
   if(studentTab==='calendar') return studentPortalCalendar(s);
   if(studentTab==='fees') return studentPortalFees(s);
   if(studentTab==='materials') return studentPortalMaterials(s);
   if(studentTab==='assignments') return studentPortalAssignments(s);
   if(studentTab==='complaints') return studentPortalComplaints(s);
   return studentPortalOverview(s);
+}
+function studentPortalSyllabus(s){
+  return `
+  <div class="panel">
+    <div class="panel-head"><h3>${esc(s.course)}</h3><div class="sub">Full course syllabus — modules and topics, in order</div></div>
+    <div class="modal-body">${syllabusListHTML(s.course)}</div>
+  </div>`;
 }
 function studentPortalCalendar(s){
   const batch = s.batchId ? batchById(s.batchId) : null;
@@ -7124,5 +7516,7 @@ function openRaiseStudentComplaint(){
 
 /* ===================== INIT ===================== */
 // Resume an existing session (cookie still valid) instead of asking for the password again.
-api('me').then(res=>bootSession(res.user, res.writable)).catch(()=>{ /* not signed in: the login screen stays up */ });
+api('me').then(res=>bootSession(res.user, res.writable, res.readable)).catch(()=>{ /* not signed in: the login screen stays up */ });
 </script>
+
+</body></html>

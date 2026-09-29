@@ -1,7 +1,7 @@
 import { route, send, readJson, clientIp } from '../lib/http.js';
 import { store } from '../lib/store.js';
 import { verifyPassword, burnTime, sessionCookie, hashPassword, validatePassword } from '../lib/auth.js';
-import { resolveAccess, writableKeys } from '../lib/policy.js';
+import { resolveAccess, writableKeys, readableKeys } from '../lib/policy.js';
 
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_PER_IP_EMAIL = 5;
@@ -45,5 +45,5 @@ export default route(['POST'], async (req, res) => {
   }
   await store.clearAttempts(k1);
   await store.audit(user.id, 'login.ok', email);
-  send(res, 200, { user: { kind: user.kind, refId: user.ref_id, access: who.access }, writable: writableKeys(who) }, { 'Set-Cookie': sessionCookie(user) });
+  send(res, 200, { user: { kind: user.kind, refId: user.ref_id, access: who.access }, writable: writableKeys(who), readable: readableKeys(who) }, { 'Set-Cookie': sessionCookie(user) });
 });

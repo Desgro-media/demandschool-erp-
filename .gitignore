@@ -4,3 +4,6 @@ node_modules
 .data
 .vercel
 .data-server.log
+
+# incoming UI drafts: merge with scripts/merge-ui.py instead of committing
+Dschool ERP.html

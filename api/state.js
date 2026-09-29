@@ -22,7 +22,7 @@ export default route(['GET', 'PUT'], async (req, res) => {
   const changes = (await readJson(req)).changes;
   if (!isPlainObject(changes)) throw httpError(400, 'changes required');
   const keys = Object.keys(changes);
-  if (keys.length === 0 || keys.length > 40) throw httpError(400, 'Invalid number of changes');
+  if (keys.length === 0 || keys.length > 60) throw httpError(400, 'Invalid number of changes');
 
   // Validate everything first so a bad key rejects the whole request before anything is written.
   for (const key of keys) {

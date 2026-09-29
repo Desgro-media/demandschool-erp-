@@ -37,6 +37,7 @@ const employees = [
   { id: 'EMP-102', name: 'Hana', dept: 'Administrative', role: 'HR Manager', email: 'hana@demandschool.in', employmentStatus: 'Active', salary: 40000 },
   { id: 'EMP-103', name: 'Sam', dept: 'Marketing', role: 'Designer', email: 'sam@demandschool.in', employmentStatus: 'Active', salary: 30000 },
   { id: 'EMP-104', name: 'Rita', dept: 'Sales', role: 'Sales Executive', email: 'rita@demandschool.in', employmentStatus: 'Active', salary: 25000, password: 'leak-me' },
+  { id: 'EMP-105', name: 'Ravi', dept: 'Academics', role: 'Academic Head', email: 'ravi@demandschool.in', employmentStatus: 'Active', salary: 38000 },
 ];
 let r = await put(admin, { employees: { base: 0, value: employees } });
 check('leadership writes employees', r.status === 200 && r.json.results.employees.version === 1, JSON.stringify(r.json));
@@ -52,6 +53,7 @@ check('weak password rejected', (await mk('staff', 'EMP-102', 'hana@demandschool
 check('create HR login', (await mk('staff', 'EMP-102', 'hana@demandschool.in', 'HanaPass123')).status === 200);
 check('create staff login', (await mk('staff', 'EMP-103', 'sam@demandschool.in', 'SamPass1234')).status === 200);
 check('create sales login', (await mk('staff', 'EMP-104', 'rita@demandschool.in', 'RitaPass123')).status === 200);
+check('create academics login', (await mk('staff', 'EMP-105', 'ravi@demandschool.in', 'RaviPass1234')).status === 200);
 check('create student login', (await mk('student', 'STU-01', 'anu@x.com', 'AnuPass1234')).status === 200);
 check('login email must match record', (await mk('staff', 'EMP-103', 'other@x.com', 'SamPass1234')).status === 400);
 
@@ -71,6 +73,9 @@ check('HR cannot reset leadership password', r.status === 403, JSON.stringify(r.
 r = await put(hr.c, { hrPolicy: { base: 0, value: { holidays: [] } } });
 check('HR can write HR data', r.status === 200);
 
+r = await put(hr.c, { sessionLogs: { base: 0, value: [{ id: 'SL-1', empId: 'EMP-105', status: 'Approved' }] } });
+check('HR can write session logs (approvals)', r.status === 200, JSON.stringify(r.json));
+
 // Staff
 const staff = await login('sam@demandschool.in', 'SamPass1234');
 const st = await staff.c('state');
@@ -86,6 +91,11 @@ r = await put(staff.c, { employees: { base: 1, value: [] } });
 check('staff cannot write employees', r.status === 403);
 r = await put(staff.c, { leaveRequests: { base: 0, value: [{ id: 'LV-1', empId: 'EMP-103', status: 'Pending' }, { id: 'LV-9', empId: 'EMP-101', status: 'Approved' }] } });
 check('staff scoped write ok, forged record dropped', r.status === 200 && r.json.results.leaveRequests.value.length === 1 && r.json.results.leaveRequests.value[0].empId === 'EMP-103', JSON.stringify(r.json));
+r = await put(staff.c, { courseSettings: { base: 0, value: { OCC: { price: 1 } } } });
+check('non-academics staff cannot edit course settings', r.status === 403);
+const acad = await login('ravi@demandschool.in', 'RaviPass1234');
+r = await put(acad.c, { courseSettings: { base: 0, value: { OCC: { price: 1, syllabus: [{ title: 'M1' }] } } } });
+check('academics staff can edit course settings/syllabus', r.status === 200, JSON.stringify(r.json));
 const sales = await login('rita@demandschool.in', 'RitaPass123');
 r = await put(sales.c, { leaveRequests: { base: 0, value: [{ id: 'LV-1', empId: 'EMP-104', status: 'Pending' }] } });
 const lv = (await admin('state')).json.state.leaveRequests.value;

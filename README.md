@@ -51,6 +51,27 @@ HR > Directory (the form's password field creates their login) and students in A
 - CSP still needs `'unsafe-inline'` for scripts because the UI uses inline `onclick=` handlers; moving them to `addEventListener` would let you drop it.
 - Every state write and login is recorded in `audit_log`.
 
+## When the UI file is updated (by anyone else)
+
+`public/index.html` is the UI with the backend/security integration merged in. If someone delivers a new
+copy of the original UI (e.g. `Dschool ERP.html`), do **not** copy it over `public/index.html`; that would
+drop the login, sync and security fixes. Instead run:
+
+```bash
+python scripts/merge-ui.py "Dschool ERP.html"    # needs Python 3; rewrites public/index.html
+```
+
+The integration itself lives in `scripts/merge/`. Every step checks its anchor and stops with a clear
+message if the new UI changed something it depends on.
+
+## Sample data
+
+The UI ships with built-in sample data (employees, students, invoices...). On the first sign-in by someone
+allowed to write a collection, anything the server has never stored is uploaded, so the database starts as a
+copy of that sample data. Restricted roles never see collections they cannot read. To start clean, empty
+the arrays in the UI file and run `DELETE FROM app_state;` in the Neon SQL editor. Note the sample data is
+also visible to anyone in the page source.
+
 ## Known limits
 
 - Each collection is stored and saved as a whole; two people editing the same collection at once get a conflict and their screen refreshes (last-save-wins is deliberately not used).
