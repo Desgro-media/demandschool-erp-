@@ -1,6 +1,6 @@
 import { route, send, readJson, clientIp } from '../lib/http.js';
 import { store } from '../lib/store.js';
-import { verifyPassword, burnTime, sessionCookie } from '../lib/auth.js';
+import { verifyPassword, burnTime, sessionCookie, hashPassword, validatePassword } from '../lib/auth.js';
 import { resolveAccess, writableKeys } from '../lib/policy.js';
 
 const WINDOW_MS = 15 * 60 * 1000;
@@ -22,6 +22,14 @@ export default route(['POST'], async (req, res) => {
   const k1 = `${email}|${clientIp(req)}`, k2 = `${email}|*`;
   if (await locked(k1, MAX_PER_IP_EMAIL) || await locked(k2, MAX_PER_EMAIL)) {
     return send(res, 429, { error: 'Too many failed attempts. Try again in 15 minutes.' }, { 'Retry-After': '900' });
+  }
+
+  // First-run bootstrap: only while there are ZERO users and ADMIN_INITIAL_PASSWORD is set. Once any
+  // user exists this does nothing, so remove that variable after the first sign-in.
+  if (process.env.ADMIN_INITIAL_PASSWORD && !validatePassword(process.env.ADMIN_INITIAL_PASSWORD) && await store.countUsers() === 0) {
+    const adminEmail = String(process.env.ADMIN_EMAIL || 'thanseemca@gmail.com').toLowerCase();
+    try { await store.createUser({ email: adminEmail, password_hash: await hashPassword(process.env.ADMIN_INITIAL_PASSWORD), kind: 'staff', ref_id: 'EMP-101', bootstrap: 'leadership' }); }
+    catch (e) { if (e.code !== '23505') throw e; }
   }
 
   const user = await store.getUserByEmail(email);
