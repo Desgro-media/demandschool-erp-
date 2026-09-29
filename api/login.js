@@ -20,7 +20,8 @@ export default route(['POST'], async (req, res) => {
   if (!email || !password || email.length > 254 || password.length > 200) return send(res, 400, { error: 'Enter your email and password' });
 
   const k1 = `${email}|${clientIp(req)}`, k2 = `${email}|*`;
-  if (await locked(k1, MAX_PER_IP_EMAIL) || await locked(k2, MAX_PER_EMAIL)) {
+  const [lockedIpEmail, lockedEmail] = await Promise.all([locked(k1, MAX_PER_IP_EMAIL), locked(k2, MAX_PER_EMAIL)]);
+  if (lockedIpEmail || lockedEmail) {
     return send(res, 429, { error: 'Too many failed attempts. Try again in 15 minutes.' }, { 'Retry-After': '900' });
   }
 
@@ -43,7 +44,7 @@ export default route(['POST'], async (req, res) => {
     // Same message for wrong email, wrong password, wrong tab, archived or disabled account.
     return send(res, 401, { error: 'Incorrect email or password' });
   }
-  await store.clearAttempts(k1);
+  await Promise.all([store.clearAttempts(k1), store.clearAttempts(k2)]);
   await store.audit(user.id, 'login.ok', email);
   send(res, 200, { user: { kind: user.kind, refId: user.ref_id, access: who.access }, writable: writableKeys(who), readable: readableKeys(who) }, { 'Set-Cookie': sessionCookie(user) });
 });

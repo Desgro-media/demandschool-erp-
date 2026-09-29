@@ -110,6 +110,12 @@ must_replace('transform:translateX(-50%);background:var(--ink);color:#fff', 'tra
 must_replace('.chip.active{background:var(--ink);border-color:var(--ink);color:#fff;}',
              '.chip.active{background:var(--solid);border-color:var(--solid);color:#fff;}\n  .chip:not(.active):hover{border-color:var(--brand);color:var(--ink);}', label='chip active')
 
+# ---------- 10. bug fixes found by QA in the UI itself ----------
+# Attendance history assumed every employee has a record for today; guest trainers do not, so the popup crashed.
+# Default to "present" exactly like the attendance table beside it does.
+must_replace('const e = byId(empId); const a = attendanceToday[empId];',
+             'const e = byId(empId); const a = attendanceToday[empId] || {status:"present", in:null};', label='attendance history: missing today record')
+
 open(out_path, 'w', encoding='utf8').write(t)
 print('\n'.join(log))
 print('written', out_path, len(t.encode('utf8')), 'bytes')

@@ -37,7 +37,7 @@ HR > Directory (the form's password field creates their login) and students in A
 | Auth | `api/login.js`, `logout.js`, `me.js`, `users.js`; scrypt hashes, signed HttpOnly `sid` cookie (8h) |
 | Data | `api/state.js`: one JSON document per collection in `app_state`, versioned (optimistic concurrency) |
 | Authorization | `lib/policy.js`: per-role read/write sets, per-record scoping, anti-escalation rules |
-| Storage | `lib/store.js`: Neon in production, JSON file locally; schema in `db/schema.sql` |
+| Storage | `lib/store.js`: Neon in production, JSON file locally; schema in `lib/schema.js` (embedded in code, created automatically on first use) |
 | Headers / CSP | `vercel.json` (dev server applies the same) |
 
 ## Security notes
@@ -75,5 +75,22 @@ also visible to anyone in the page source.
 ## Known limits
 
 - Each collection is stored and saved as a whole; two people editing the same collection at once get a conflict and their screen refreshes (last-save-wins is deliberately not used).
-- Requests are capped at ~4 MB (Vercel limit); large base64 task attachments will hit this. Move files to Vercel Blob if that matters.
-- Tests: with the dev server running, `ADMIN_PW=... node scripts/smoke-test.mjs` (it writes test users; run on a scratch `.data`).
+- Requests are capped at ~4 MB (Vercel limit). Task/assignment attachments currently record only the file name and size, not the file itself; real file storage (e.g. Vercel Blob) would be a separate addition.
+- The UI treats "today" as the fixed date `TODAY` in the UI file (15 Sep 2026): attendance "today", overdue checks and the current month all follow it, and payroll only has Aug/Sep 2026 sheets. Make it dynamic before relying on the app past that period.
+- Two people editing the *same record* at the same moment: the last save wins for that record (edits to different records are merged, nothing is lost).
+
+## Testing
+
+```bash
+npm i --no-save playwright-core          # once (uses your installed Chrome; set CHROME_PATH if it is elsewhere)
+npm run dev                              # in one terminal, on a scratch database (delete .data first, then init-db)
+
+ADMIN_PW='<admin password>' node scripts/smoke-test.mjs      # 47 API/security checks
+node qa/qa-crawl.mjs                                          # every screen x every role, clicks every control
+node qa/qa-detail.mjs                                         # every detail page + all printable documents
+node qa/qa-flows.mjs                                          # create employee/student logins, leave approval,
+                                                              # simultaneous edits, offline/500, revocation, injection
+```
+
+To test against real PostgreSQL semantics without a Neon database: `bash qa/neon-sim/run.sh`, then repeat the
+commands above with `BASE=http://127.0.0.1:3100` (add `CLI=0` for `qa-flows.mjs`).

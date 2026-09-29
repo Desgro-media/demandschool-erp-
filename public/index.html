@@ -3189,7 +3189,7 @@ function attendanceHistoryFor(empId){
   return months.reverse();
 }
 function openAttendanceHistory(empId){
-  const e = byId(empId); const a = attendanceToday[empId];
+  const e = byId(empId); const a = attendanceToday[empId] || {status:"present", in:null};
   const months = attendanceHistoryFor(empId);
   const totals = months.reduce((s,mo)=>({working:s.working+mo.workingDays, present:s.present+mo.present, leave:s.leave+mo.leaveDays, absent:s.absent+mo.absentDays}), {working:0,present:0,leave:0,absent:0});
   const rate = totals.working ? ((totals.present/totals.working)*100).toFixed(1) : "0.0";
@@ -7141,6 +7141,95 @@ async function reloadFromServer(){
   loadServerState(state);
   rerenderCurrent();
 }
+/* ---- when someone else saved the same collection first ---- */
+// Instead of throwing away the user's edit, re-apply it on top of the latest server copy, record by record:
+//   base   = what this browser last synced      mine = what is on screen now      theirs = what the server has now
+// Records added / edited / deleted here (matched by id) are replayed onto `theirs`; anything this browser did
+// not touch keeps the other person's version. Only when two people edit the *same record* does the last saver win.
+const recKey = r => (r && typeof r === 'object' && !Array.isArray(r)) ? (r.id != null ? 'id:'+r.id : null)
+  : (typeof r === 'string' || typeof r === 'number') ? 'v:'+r : null;
+const sameJson = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+const isPlainObj = v => v && typeof v === 'object' && !Array.isArray(v);
+function mergeArrays(base, mine, theirs){
+  if([base, mine, theirs].some(arr => arr.some(r => recKey(r) === null))) return null;   // records without ids can't be matched
+  const b = new Map(base.map(r=>[recKey(r), r])), m = new Map(mine.map(r=>[recKey(r), r])), t = new Map(theirs.map(r=>[recKey(r), r]));
+  const out = [];
+  for(const r of theirs){
+    const k = recKey(r);
+    if(b.has(k) && !m.has(k)) continue;                                              // deleted here
+    if(b.has(k) && m.has(k) && !sameJson(m.get(k), b.get(k))) out.push(m.get(k));      // edited here
+    else out.push(r);                                                                 // untouched here: keep theirs
+  }
+  let anchor = null;                                                                  // insert additions where they were on screen
+  const numericIds = out.concat(mine).map(r=>r && r.id).filter(x=>typeof x === 'number');
+  for(const r of mine){
+    const k = recKey(r);
+    if(b.has(k)){ if(out.some(o=>recKey(o)===k)) anchor = k; continue; }
+    let rec = r;
+    if(t.has(k)){                                                                    // same id created on both sides
+      rec = { ...r, id: typeof r.id === 'number' ? Math.max(0, ...numericIds) + 1 : r.id + '-' + Math.random().toString(36).slice(2,6) };
+    }
+    const at = anchor === null ? 0 : out.findIndex(o=>recKey(o)===anchor) + 1;
+    out.splice(at, 0, rec);
+    anchor = recKey(rec);
+  }
+  return out;
+}
+function mergeObjects(base, mine, theirs){
+  const out = { ...theirs };
+  for(const k of Object.keys(mine)) if(!sameJson(mine[k], base[k])) out[k] = mine[k];
+  for(const k of Object.keys(base)) if(!(k in mine)) delete out[k];
+  return out;
+}
+async function rebaseConflicts(keys){
+  const { state } = await api('state');
+  const discarded = [];
+  for(const k of keys){
+    const srv = state[k]; if(!srv) continue;
+    const theirs = srv.value, mine = JSON.parse(JSON.stringify(SYNC_KEYS[k]()));
+    let base = null; try{ base = JSON.parse(syncSnap[k]); }catch(_){}
+    let merged = null;
+    if(base !== null){
+      if(Array.isArray(mine) && Array.isArray(theirs) && Array.isArray(base)) merged = mergeArrays(base, mine, theirs);
+      else if(isPlainObj(mine) && isPlainObj(theirs) && isPlainObj(base)) merged = mergeObjects(base, mine, theirs);
+    }
+    if(merged === null){ merged = theirs; discarded.push(k); }
+    applyServerValue(k, merged);
+    syncVersions[k] = srv.version;
+    syncSnap[k] = JSON.stringify(theirs);     // compare against what the server holds, so the merged result is re-sent
+  }
+  reseedIdCounters();
+  return discarded;
+}
+
+// Pick up other people's changes without a reload — but only when it cannot disturb the user: nothing unsaved,
+// no dialog open and nobody typing (replacing records under an open edit form would orphan what it edits).
+let pulling = false;
+async function pullUpdates(){
+  if(!syncEnabled || syncBusy || pulling) return;
+  const ov = document.getElementById('overlay'), a = document.activeElement;
+  if((ov && !ov.hidden) || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+  if(syncWritable.some(k=>SYNC_KEYS[k] && JSON.stringify(SYNC_KEYS[k]()) !== syncSnap[k])) return;
+  pulling = true;
+  try{
+    const { state } = await api('state');
+    if(syncBusy) return;
+    let changed = false;
+    for(const k of Object.keys(state)){
+      if(!SYNC_KEYS[k] || state[k].version === syncVersions[k]) continue;
+      applyServerValue(k, state[k].value);
+      syncVersions[k] = state[k].version;
+      syncSnap[k] = JSON.stringify(SYNC_KEYS[k]());
+      changed = true;
+    }
+    if(changed){ reseedIdCounters(); rerenderCurrent(); }
+  }catch(_){ /* offline or expired: the next save reports it */ }
+  finally{ pulling = false; }
+}
+
+// Warn once per failure streak, not on every retry tick while the network is down.
+let syncWarned = false;
+function syncWarn(msg){ if(syncWarned) return; syncWarned = true; toast(msg); }
 function queueSave(){
   if(!syncEnabled) return;
   clearTimeout(syncTimer);
@@ -7159,22 +7248,33 @@ async function flushState(){
   syncBusy = true;
   try{
     const { results } = await api('state', { method:'PUT', body:{ changes } });
-    let conflict = false, refresh = false;
+    const conflicted = []; let refresh = false, failed = false;
     for(const k of Object.keys(results)){
       const r = results[k];
-      if(r.conflict){ conflict = true; continue; }
+      if(r.conflict){ conflicted.push(k); continue; }
+      if(r.error){ failed = true; continue; }          // stays unsaved, retried on the next tick
       syncVersions[k] = r.version;
       if(r.value !== undefined){ applyServerValue(k, r.value); syncSnap[k] = JSON.stringify(SYNC_KEYS[k]()); refresh = true; }
       else syncSnap[k] = sent[k];
     }
-    if(conflict){ await reloadFromServer(); toast('Someone else changed this data — your screen was refreshed'); }
-    else if(refresh) rerenderCurrent();
+    if(conflicted.length){
+      const discarded = await rebaseConflicts(conflicted);
+      rerenderCurrent();
+      toast(discarded.length ? 'Someone else changed this data at the same time — your screen was refreshed' : 'Merged with changes a teammate just saved');
+      syncDirty = true;                      // re-send the merged result
+    } else if(refresh) rerenderCurrent();
+    if(failed) syncWarn("Couldn't save everything — will retry"); else syncWarned = false;
   }catch(err){
-    if(err.status===401){ toast('Session expired — please sign in again'); setTimeout(()=>location.reload(), 1200); }
+    if(err.status===401){
+      syncEnabled = false;                   // otherwise the "unsaved changes" prompt would block the reload
+      toast('Session expired — please sign in again'); setTimeout(()=>location.reload(), 1200);
+    }
     else if(err.status>=400 && err.status<500){
-      for(const k of Object.keys(sent)) syncSnap[k] = sent[k];   // rejected for good; don't retry forever
-      toast("Couldn't save: "+err.message);
-    } else toast("Couldn't save — will retry ("+err.message+")");
+      // Rejected for good (permission/validation/size): show what is actually saved rather than a screen
+      // that silently disagrees with the server.
+      try{ await reloadFromServer(); }catch(_){}
+      toast("Couldn't save: "+err.message+" — your last change was not applied");
+    } else syncWarn("Couldn't save — will retry ("+err.message+")");
   }finally{
     syncBusy = false;
     if(syncDirty){ syncDirty = false; queueSave(); }
@@ -7194,6 +7294,8 @@ async function saveNow(){
   render = function(){ const r = _render.apply(this, arguments); queueSave(); return r; };
   renderStudentPortal = function(){ const r = _renderStudent.apply(this, arguments); queueSave(); return r; };
   setInterval(queueSave, 8000);
+  setInterval(pullUpdates, 45000);                                   // see teammates' changes without reloading
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) pullUpdates(); });
   window.addEventListener('beforeunload', e=>{
     if(!syncEnabled) return;
     const pending = syncBusy || syncWritable.some(k=>SYNC_KEYS[k] && JSON.stringify(SYNC_KEYS[k]())!==syncSnap[k]);
