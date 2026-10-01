@@ -3558,7 +3558,7 @@ function openAddEmployee(){
       <div class="field-row">
         <div><label class="field-label">Employment status</label><select class="field-input" name="empType" onchange="toggleEmpPayFields(this.value)"><option value="Probation">Probation</option><option value="Permanent">Permanent</option><option value="Guest Trainer">Guest Trainer (hourly)</option></select></div>
         <div id="emp-salary-field"><label class="field-label">Monthly gross (₹)</label><input class="field-input" type="number" name="salary" min="1000" step="500" placeholder="26000"></div>
-        <div id="emp-hourly-field" style="display:none;"><label class="field-label">Hourly rate (₹)</label><input class="field-input" type="number" name="hourlyRate" min="0" step="50" placeholder="450"></div>
+        <div id="emp-hourly-field" style="display:none;"><label class="field-label">Hourly rate (₹)</label><input class="field-input" type="number" name="hourlyRate" min="0" step="any" placeholder="450"></div>
       </div>
       <div><label class="field-label">Email</label><input class="field-input" type="email" name="email" required placeholder="name@demandschool.in"></div>
       <div><label class="field-label">Phone</label><input class="field-input" name="phone" required placeholder="+91 9xxxx xxxxx"></div>
@@ -3696,7 +3696,7 @@ function openEditEmployee(id){
       <div class="field-row">
         <div><label class="field-label">Employment status</label><select class="field-input" name="empType" onchange="toggleEmpPayFields(this.value)"><option value="Probation" ${e.empType==="Probation"?"selected":""}>Probation</option><option value="Permanent" ${e.empType==="Permanent"?"selected":""}>Permanent</option><option value="Guest Trainer" ${e.empType==="Guest Trainer"?"selected":""}>Guest Trainer (hourly)</option></select></div>
         <div id="emp-salary-field" style="${e.empType==='Guest Trainer'?'display:none;':''}"><label class="field-label">Monthly gross (₹)</label><input class="field-input" type="number" name="salary" min="1000" step="500" value="${e.salary||''}"></div>
-        <div id="emp-hourly-field" style="${e.empType==='Guest Trainer'?'':'display:none;'}"><label class="field-label">Hourly rate (₹)</label><input class="field-input" type="number" name="hourlyRate" min="0" step="50" value="${e.hourlyRate||''}"></div>
+        <div id="emp-hourly-field" style="${e.empType==='Guest Trainer'?'':'display:none;'}"><label class="field-label">Hourly rate (₹)</label><input class="field-input" type="number" name="hourlyRate" min="0" step="any" value="${e.hourlyRate||''}"></div>
       </div>
       <div><label class="field-label">Email</label><input class="field-input" type="email" name="email" required value="${esc(e.email)}"></div>
       <div><label class="field-label">Phone</label><input class="field-input" name="phone" required value="${esc(e.phone)}"></div>
