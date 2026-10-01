@@ -800,8 +800,6 @@ function computePayrollRow(emp, month){
   const basic = Math.round(gross*0.6);
   const hra = Math.round(gross*0.2);
   const special = gross - basic - hra;
-  const pf = Math.round(basic*0.12);
-  const pt = 200;
   // Loss of Pay: each employee gets hrPolicy.paidLeavesPerMonth paid leave day(s) a month — any leave
   // beyond that, that same month, is deducted in full at gross ÷ that month's working days. WFH beyond
   // hrPolicy.paidWfhPerMonth is paid at 75% (a 25% cut) for each excess day instead of a full LOP.
@@ -812,12 +810,12 @@ function computePayrollRow(emp, month){
   const lopDeduction = Math.round(perDayRate * lopDays);
   const wfhExcessDays = wfhExcessDaysFor(emp.id, month);
   const wfhDeduction = Math.round(perDayRate * 0.25 * wfhExcessDays);
-  const totalDeductions = pf+pt+lopDeduction+wfhDeduction;
+  const totalDeductions = lopDeduction+wfhDeduction;
   const net = gross-totalDeductions;
   const paid = (rec.payments||[]).reduce((s,p)=>s+p.amount,0);
   const balance = Math.max(0, net-paid);
   const payStatus = paid<=0 ? "Unpaid" : balance>0 ? "Partially Paid" : "Paid";
-  return {basic,hra,special,gross,pf,pt,lopDays,lopDeduction,wfhExcessDays,wfhDeduction,monthWorkingDays,totalDeductions,net,paid,balance,payStatus};
+  return {basic,hra,special,gross,lopDays,lopDeduction,wfhExcessDays,wfhDeduction,monthWorkingDays,totalDeductions,net,paid,balance,payStatus};
 }
 // Small "incl. Xd LOP / Yd WFH@75%" subtext shown under a payroll row's Deductions figure — shared by
 // hrPayroll() and acctPayroll() so both stay in sync.
@@ -1114,7 +1112,7 @@ function openLogSession(batchId, calSessionId){
       </div>
       <div class="field-row">
         <div style="flex:2;"><label class="field-label">Topic actually covered</label><input class="field-input" name="topic" required value="${esc(s.topic||'')}" placeholder="What you actually taught this session"></div>
-        <div><label class="field-label">Hours spent</label><input class="field-input" type="number" name="hours" min="0.5" step="0.5" required placeholder="e.g. 2"></div>
+        <div><label class="field-label">Hours spent</label><input class="field-input" type="number" name="hours" min="0.5" step="any" required placeholder="e.g. 2"></div>
       </div>
       <div><label class="field-label">Notes <span class="faint">(optional)</span></label><textarea class="field-input" name="notes" rows="3" placeholder="How the session went, anything worth flagging"></textarea></div>
       ${guest?`<div class="subtext">This submission goes to HR for approval — once approved, the hours count toward your payroll for ${MONTH_LABEL[s.date.slice(0,7)]||s.date.slice(0,7)}.</div>`:`<div class="subtext">This is a record for Academics/HR to see the class happened and what was covered — as a Permanent trainer, your hours here are for monitoring only and don't affect payroll.</div>`}
@@ -1419,7 +1417,7 @@ function openRequestCommissionWithdrawal(){
     <div class="modal-head"><h3>Request commission withdrawal</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-request-withdrawal"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>${inr(mine.balance)} outstanding. Submitted to Finance for approval — once approved, it's paid out against your commission entries.</div></div>
-      <div><label class="field-label">Amount to withdraw (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${mine.balance}" step="1" required value="${mine.balance}"></div>
+      <div><label class="field-label">Amount to withdraw (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${mine.balance}" step="any" required value="${mine.balance}"></div>
       <div><label class="field-label">Note (optional)</label><textarea class="field-input" name="note" placeholder="Anything Finance should know"></textarea></div>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Submit request</button></div></div>
@@ -2559,7 +2557,7 @@ function openRequestAdvance(){
     <div class="modal-head"><h3>Request advance salary</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-request-advance"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>For salary you haven't fully earned yet — i.e. before this month ends. Submitted to HR for approval; once approved, Finance pays it out fully or in parts — nothing is recovered from your salary later. Already earned last month's salary and just waiting on the scheduled payout? Use Withdrawal Request instead.</div></div>
-      <div><label class="field-label">Amount (₹)</label><input class="field-input" type="number" name="amount" min="500" step="500" required placeholder="10000"></div>
+      <div><label class="field-label">Amount (₹)</label><input class="field-input" type="number" name="amount" min="500" step="any" required placeholder="10000"></div>
       <div><label class="field-label">Reason</label><textarea class="field-input" name="reason" required placeholder="Brief reason for the request"></textarea></div>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Submit request</button></div></div>
@@ -2596,7 +2594,7 @@ function openRequestPayment(){
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>For anything other than a salary advance — a reimbursement, a purchase you fronted, travel, etc. This goes straight to Accounts, not HR.</div></div>
       <div class="field-row">
         <div><label class="field-label">Category</label><select class="field-input" name="category">${PAYMENT_REQUEST_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
-        <div><label class="field-label">Amount (₹)</label><input class="field-input" type="number" name="amount" min="1" step="1" required placeholder="2500"></div>
+        <div><label class="field-label">Amount (₹)</label><input class="field-input" type="number" name="amount" min="1" step="any" required placeholder="2500"></div>
       </div>
       <div><label class="field-label">Reason</label><textarea class="field-input" name="reason" required placeholder="What's this for?"></textarea></div>
     </div>
@@ -2719,7 +2717,7 @@ function openRequestWithdrawal(){
     <div class="modal-head"><h3>Request withdrawal — ${esc(MONTH_LABEL[eu.month]||eu.month)}</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-request-withdrawal"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>${inr(eu.requestable)} of your ${esc(MONTH_LABEL[eu.month]||eu.month)} salary is earned and still unpaid. This isn't Advance Salary — nothing is recovered later, it's simply paid out early.</div></div>
-      <div><label class="field-label">Amount to withdraw (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${eu.requestable}" step="1" required value="${eu.requestable}"></div>
+      <div><label class="field-label">Amount to withdraw (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${eu.requestable}" step="any" required value="${eu.requestable}"></div>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Submit request</button></div></div>
     </form>`);
@@ -3478,8 +3476,8 @@ function hrPolicies(){
     <div class="panel-head"><h3>Monthly paid leave &amp; WFH allowance</h3><div class="sub">What actually drives payroll's Loss of Pay and WFH pay-cut, every month</div></div>
     <div class="panel-body">
       <div class="field-row">
-        <div><label class="field-label">Paid leave (days/month)</label><input class="field-input" id="policy-paid-leaves" type="number" min="0" step="1" value="${hrPolicy.paidLeavesPerMonth}"></div>
-        <div><label class="field-label">Paid WFH (days/month)</label><input class="field-input" id="policy-paid-wfh" type="number" min="0" step="1" value="${hrPolicy.paidWfhPerMonth}"></div>
+        <div><label class="field-label">Paid leave (days/month)</label><input class="field-input" id="policy-paid-leaves" type="number" min="0" step="any" value="${hrPolicy.paidLeavesPerMonth}"></div>
+        <div><label class="field-label">Paid WFH (days/month)</label><input class="field-input" id="policy-paid-wfh" type="number" min="0" step="any" value="${hrPolicy.paidWfhPerMonth}"></div>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:10px;"><button class="btn primary btn-sm" onclick="saveLeavePayCaps()">Save caps</button></div>
       <div class="banner muted" style="margin-top:14px;">
@@ -3557,7 +3555,7 @@ function openAddEmployee(){
       </div>
       <div class="field-row">
         <div><label class="field-label">Employment status</label><select class="field-input" name="empType" onchange="toggleEmpPayFields(this.value)"><option value="Probation">Probation</option><option value="Permanent">Permanent</option><option value="Guest Trainer">Guest Trainer (hourly)</option></select></div>
-        <div id="emp-salary-field"><label class="field-label">Monthly gross (₹)</label><input class="field-input" type="number" name="salary" min="1000" step="500" placeholder="26000"></div>
+        <div id="emp-salary-field"><label class="field-label">Monthly gross (₹)</label><input class="field-input" type="number" name="salary" min="1000" step="any" placeholder="26000"></div>
         <div id="emp-hourly-field" style="display:none;"><label class="field-label">Hourly rate (₹)</label><input class="field-input" type="number" name="hourlyRate" min="0" step="any" placeholder="450"></div>
       </div>
       <div><label class="field-label">Email</label><input class="field-input" type="email" name="email" required placeholder="name@demandschool.in"></div>
@@ -3650,7 +3648,7 @@ function openSalaryRevision(id){
       <div class="person" style="margin-bottom:4px;">${personCell(e)}</div>
       <div class="field-row">
         <div><label class="field-label">Current monthly gross</label><div class="mono">${inr(e.salary)}</div></div>
-        <div><label class="field-label">New monthly gross (₹)</label><input class="field-input" type="number" name="amount" min="1000" step="500" required value="${e.salary}"></div>
+        <div><label class="field-label">New monthly gross (₹)</label><input class="field-input" type="number" name="amount" min="1000" step="any" required value="${e.salary}"></div>
       </div>
       <div class="field-row">
         <div><label class="field-label">Effective from</label><input class="field-input" type="date" name="effectiveDate" value="${TODAY}" required></div>
@@ -3695,7 +3693,7 @@ function openEditEmployee(id){
       </div>
       <div class="field-row">
         <div><label class="field-label">Employment status</label><select class="field-input" name="empType" onchange="toggleEmpPayFields(this.value)"><option value="Probation" ${e.empType==="Probation"?"selected":""}>Probation</option><option value="Permanent" ${e.empType==="Permanent"?"selected":""}>Permanent</option><option value="Guest Trainer" ${e.empType==="Guest Trainer"?"selected":""}>Guest Trainer (hourly)</option></select></div>
-        <div id="emp-salary-field" style="${e.empType==='Guest Trainer'?'display:none;':''}"><label class="field-label">Monthly gross (₹)</label><input class="field-input" type="number" name="salary" min="1000" step="500" value="${e.salary||''}"></div>
+        <div id="emp-salary-field" style="${e.empType==='Guest Trainer'?'display:none;':''}"><label class="field-label">Monthly gross (₹)</label><input class="field-input" type="number" name="salary" min="1000" step="any" value="${e.salary||''}"></div>
         <div id="emp-hourly-field" style="${e.empType==='Guest Trainer'?'':'display:none;'}"><label class="field-label">Hourly rate (₹)</label><input class="field-input" type="number" name="hourlyRate" min="0" step="any" value="${e.hourlyRate||''}"></div>
       </div>
       <div><label class="field-label">Email</label><input class="field-input" type="email" name="email" required value="${esc(e.email)}"></div>
@@ -3758,7 +3756,7 @@ function openAddAdvance(){
     <div class="modal-head"><h3>New advance salary request</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-add-advance"><div class="modal-body">
       <div><label class="field-label">Employee</label><select class="field-input" name="empId">${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
-      <div><label class="field-label">Amount (₹)</label><input class="field-input" type="number" name="amount" min="500" step="500" required placeholder="10000"></div>
+      <div><label class="field-label">Amount (₹)</label><input class="field-input" type="number" name="amount" min="500" step="any" required placeholder="10000"></div>
       <div><label class="field-label">Reason</label><textarea class="field-input" name="reason" required placeholder="Brief reason for the request"></textarea></div>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Submit request</button></div></div>
@@ -3914,8 +3912,6 @@ function openPayslip(id, readOnly){
       <div class="calc-line"><span>Special allowance</span><span class="mono">${inr(c.special)}</span></div>
       <div class="calc-line total"><span>Gross pay</span><span class="mono">${inr(c.gross)}</span></div>
       <div class="section-label">Deductions</div>
-      <div class="calc-line"><span>Provident fund</span><span class="mono">−${inr(c.pf)}</span></div>
-      <div class="calc-line"><span>Professional tax</span><span class="mono">−${inr(c.pt)}</span></div>
       ${c.lopDeduction>0?`<div class="calc-line"><span>Loss of Pay (${c.lopDays} day${c.lopDays===1?"":"s"} beyond ${hrPolicy.paidLeavesPerMonth}/month · ${MONTH_LABEL[month]} has ${c.monthWorkingDays} working days)</span><span class="mono" style="color:var(--neg);">−${inr(c.lopDeduction)}</span></div>`:""}
       ${c.wfhDeduction>0?`<div class="calc-line"><span>WFH beyond ${hrPolicy.paidWfhPerMonth}/month (${c.wfhExcessDays} day${c.wfhExcessDays===1?"":"s"} · paid at 75%)</span><span class="mono" style="color:var(--neg);">−${inr(c.wfhDeduction)}</span></div>`:""}
       <div class="calc-line total"><span>Net pay</span><span class="mono">${inr(c.net)}</span></div>
@@ -3983,7 +3979,7 @@ function openAddPayrollEntry(id){
       ${guest ? `<div class="calc-line"><span>Approved session hours — ${esc(MONTH_LABEL[month]||month)}</span><span class="mono">${guestHours} hrs × ${inr(e.hourlyRate||0)}/hr</span></div>` : ''}
       <div class="field-row" style="margin-top:10px;">
         <div><label class="field-label">${guest?'Hourly rate':'Master monthly gross'}</label><div class="mono">${guest?inr(e.hourlyRate||0)+'/hr':inr(e.salary)}</div></div>
-        <div><label class="field-label">Gross for ${MONTH_LABEL[month]} (₹)</label><input class="field-input" type="number" name="gross" min="0" step="500" required value="${startGross}"></div>
+        <div><label class="field-label">Gross for ${MONTH_LABEL[month]} (₹)</label><input class="field-input" type="number" name="gross" min="0" step="any" required value="${startGross}"></div>
       </div>
       <div class="subtext">${guest ? `Prefilled from this month's HR-approved session hours (${guestHours} hrs × ${inr(e.hourlyRate||0)}/hr). Adjust if needed before adding — hours approved after this is added won't update it automatically.` : "Adjust this if the month's pay differs from the master salary — unpaid leave deductions, a mid-month joiner, or a pending salary revision. Loss of Pay for excess leave and the 75%-pay cut for excess WFH are both applied automatically once added."} Once added, this employee's figures appear in the payroll list below and can be paid in full or in parts.</div>
     </div>
@@ -4009,7 +4005,7 @@ function openRecordPayment(id){
         <div><label class="field-label">Balance due</label><div class="mono">${inr(c.balance)}</div></div>
       </div>
       <div class="field-row">
-        <div><label class="field-label">Amount paying now (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${c.balance}" step="1" required value="${c.balance}"></div>
+        <div><label class="field-label">Amount paying now (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${c.balance}" step="any" required value="${c.balance}"></div>
         <div><label class="field-label">Date</label><input class="field-input" type="date" name="date" value="${TODAY}" required></div>
       </div>
       <div><label class="field-label">Note</label><input class="field-input" name="note" placeholder="e.g. Partial — fund shortage, rest next cycle"></div>
@@ -4591,7 +4587,7 @@ function openRecordQuotePayment(id){
     <form id="f-quote-paid"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>${esc(party.name)}${party.kind==='lead'?' (lead)':''} · <b>${inr(quoteTotal(q))}</b> quote total · <b>${inr(bal)}</b> not yet recorded as paid — partial payments are fine. This pushes the payment to Finance, who'll confirm the money landed before it's added to the invoice.</div></div>
       <div class="field-row">
-        <div><label class="field-label">Amount paid (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="1" required value="${bal}"></div>
+        <div><label class="field-label">Amount paid (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="any" required value="${bal}"></div>
         <div><label class="field-label">Payment date</label><input class="field-input" type="date" name="paymentDate" value="${TODAY}" required></div>
       </div>
       <div><label class="field-label">Note for Finance (optional)</label><input class="field-input" name="note" placeholder="e.g. Paid via UPI, ref UTR..."></div>
@@ -5806,7 +5802,7 @@ function openPayAdvance(id){
         <div><label class="field-label">Balance</label><div class="mono">${inr(balance)}</div></div>
       </div>
       <div class="field-row">
-        <div><label class="field-label">Amount to pay now (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${balance}" step="1" required value="${balance}"></div>
+        <div><label class="field-label">Amount to pay now (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${balance}" step="any" required value="${balance}"></div>
         <div><label class="field-label">Paid from account</label><select class="field-input" name="accountId">${bankAccounts.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select></div>
       </div>
       <div class="field-row">
@@ -6064,7 +6060,7 @@ function openRecordInvoicePayment(id){
     <form id="f-inv-payment"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>${esc(studentById(inv.studentId).name)} · ${inr(invoiceTotal(inv))} invoiced · <b>${inr(bal)}</b> balance remaining</div></div>
       <div class="field-row">
-        <div><label class="field-label">Amount received (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="1" required value="${bal}"></div>
+        <div><label class="field-label">Amount received (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="any" required value="${bal}"></div>
         <div><label class="field-label">Date</label><input class="field-input" type="date" name="date" value="${TODAY}" required></div>
       </div>
       <div><label class="field-label">Credited to account</label><select class="field-input" name="accountId">${bankAccounts.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select></div>
@@ -6097,7 +6093,7 @@ function openSubmitInvoicePayment(id){
     <form id="f-submit-invoice-payment"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>${esc(student.name)} · <b>${inr(bal)}</b> balance remaining — full or partial is fine. This pushes the payment to Finance, who'll confirm the money landed before it's added to the invoice — the credited sales person earns 10% commission on whatever they collect beyond ${inr(SALES_COMMISSION_THRESHOLD)} that month, once approved.</div></div>
       <div class="field-row">
-        <div><label class="field-label">Amount collected (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="1" required value="${bal}"></div>
+        <div><label class="field-label">Amount collected (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="any" required value="${bal}"></div>
         <div><label class="field-label">Payment date</label><input class="field-input" type="date" name="paymentDate" value="${TODAY}" required></div>
       </div>
       <div><label class="field-label">Collected by</label><select class="field-input" name="salesPerson">${salesOptions}</select></div>
@@ -6208,7 +6204,7 @@ function openRecordPayablePayment(id){
     <form id="f-pay-payable"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>${esc(p.payee)} · ${inr(p.amount)} owed · <b>${inr(bal)}</b> balance remaining · liability account <b>${esc(liabilityAccountFor(p.category))}</b></div></div>
       <div class="field-row">
-        <div><label class="field-label">Amount paid (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="1" required value="${bal}"></div>
+        <div><label class="field-label">Amount paid (₹)</label><input class="field-input" type="number" name="amount" min="1" max="${bal}" step="any" required value="${bal}"></div>
         <div><label class="field-label">Date</label><input class="field-input" type="date" name="date" value="${TODAY}" required></div>
       </div>
       <div><label class="field-label">Paid from account</label><select class="field-input" name="accountId">${bankAccounts.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select></div>
@@ -6307,7 +6303,7 @@ function openAddBankAccount(){
         <div><label class="field-label">Bank</label><input class="field-input" name="bank" required placeholder="e.g. Axis Bank"></div>
         <div><label class="field-label">Account number (last 4 digits)</label><input class="field-input" name="number" placeholder="e.g. 9021"></div>
       </div>
-      <div><label class="field-label">Opening balance (₹)</label><input class="field-input" type="number" name="opening" min="0" step="1" required placeholder="0"></div>
+      <div><label class="field-label">Opening balance (₹)</label><input class="field-input" type="number" name="opening" min="0" step="any" required placeholder="0"></div>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Add account</button></div></div>
     </form>`);
@@ -6330,7 +6326,7 @@ function openEditBankAccount(id){
         <div><label class="field-label">Bank</label><input class="field-input" name="bank" required value="${esc(b.bank)}"></div>
         <div><label class="field-label">Account number (last 4 digits)</label><input class="field-input" name="number" value="${esc(rawNumber)}"></div>
       </div>
-      <div><label class="field-label">Opening balance (₹)</label><input class="field-input" type="number" name="opening" min="0" step="1" required value="${b.opening}"></div>
+      <div><label class="field-label">Opening balance (₹)</label><input class="field-input" type="number" name="opening" min="0" step="any" required value="${b.opening}"></div>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Save changes</button></div></div>
     </form>`);
