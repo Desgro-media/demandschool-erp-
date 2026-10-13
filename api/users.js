@@ -2,7 +2,7 @@ import { route, send, readJson } from '../lib/http.js';
 import { store } from '../lib/store.js';
 import { requireWho } from '../lib/session.js';
 import { hashPassword, verifyPassword, validatePassword } from '../lib/auth.js';
-import { httpError, resolveAccess } from '../lib/policy.js';
+import { httpError, resolveAccess, canManageStaff, canManageStudents } from '../lib/policy.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -20,6 +20,21 @@ export default route(['POST'], async (req, res) => {
     return send(res, 200, { ok: true, reauth: true });   // token_version bumped: caller must sign in again
   }
 
+  // Removes a staff login (used when an employee is deleted permanently). The employee record must still exist
+  // here so the leadership/self checks can run; the browser deletes the record afterwards.
+  if (body.action === 'delete') {
+    if (!canManageStaff(who)) throw httpError(403, 'Only HR or leadership can delete employees');
+    const refId = String(body.refId || '');
+    if (refId === who.empId) throw httpError(403, 'You cannot delete your own account');
+    const login = await store.getUserByRef('staff', refId);
+    if (login && login.bootstrap === 'leadership') throw httpError(403, 'The main admin account cannot be deleted');
+    const target = resolveAccess({ kind: 'staff', ref_id: refId }, employees);
+    if (target && target.access === 'leadership' && who.access !== 'leadership') throw httpError(403, 'Only leadership can delete a leadership account');
+    await store.deleteUserByRef('staff', refId);
+    await store.audit(me.id, 'user.delete', `staff:${refId}`);
+    return send(res, 200, { ok: true });
+  }
+
   if (body.action !== 'set') throw httpError(400, 'Unknown action');
   const kind = body.kind === 'student' ? 'student' : 'staff';
   const refId = String(body.refId || '');
@@ -28,7 +43,7 @@ export default route(['POST'], async (req, res) => {
   const bad = validatePassword(body.password); if (bad) throw httpError(400, bad);
 
   if (kind === 'staff') {
-    if (!['leadership', 'hr'].includes(who.access)) throw httpError(403, 'Only HR or leadership can set staff logins');
+    if (!canManageStaff(who)) throw httpError(403, 'Only HR or leadership can set staff logins');
     const emp = employees.find(e => e.id === refId);
     if (!emp) throw httpError(404, 'Employee not found: save the employee first');
     if ((emp.email || '').toLowerCase() !== email) throw httpError(400, "Email must match the employee's email");
@@ -38,7 +53,7 @@ export default route(['POST'], async (req, res) => {
       throw httpError(403, 'Only leadership can reset a leadership login');
     }
   } else {
-    if (!['leadership', 'sales', 'staff'].includes(who.access)) throw httpError(403, 'Not allowed to set student logins');
+    if (!canManageStudents(who)) throw httpError(403, 'Not allowed to set student logins');
     const rows = await store.getState(['students']);
     const stu = ((rows[0] && rows[0].value) || []).find(s => s.id === refId);
     if (!stu) throw httpError(404, 'Student not found: save the student first');

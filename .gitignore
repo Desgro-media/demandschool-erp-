@@ -10,3 +10,7 @@ Dschool ERP.html
 
 # QA sandbox
 qa/neon-sim/app
+
+# import backups (contain real data)
+backup-app_state-*.json
+.env*

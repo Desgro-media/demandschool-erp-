@@ -2001,17 +2001,38 @@ let nav = {module:"dashboard", sub:{workspace:"overview", hr:"overview", marketi
 // advances, complaints, policies — so their sidebar shows nothing else. Their payroll work already
 // flows into Accounts (payroll cost/payable in P&L & Balance Sheet, sales excluded per commission
 // model) without them needing the Accounts module itself — see computePL()/computeBalanceSheet().
-function isHRRole(emp){ return !!(emp && /HR/i.test(emp.role||"")); }
+// Which "view" an employee gets. HR > Edit employee > "What they can see" sets emp.access explicitly;
+// when it's blank the old guess from role/department applies. Mirrors resolveAccess() in lib/policy.js.
+const ACCESS_LEVELS = [
+  {v:"leadership", label:"Leadership — everything", mods:"All modules"},
+  {v:"hr", label:"HR — people & payroll", mods:"HR"},
+  {v:"finance", label:"Finance — accounts & payments", mods:"My Workspace, Accounts"},
+  {v:"sales", label:"Sales — students, quotes, commission", mods:"My Workspace, Marketing, Academics"},
+  {v:"marketing", label:"Marketing — content & campaigns", mods:"My Workspace, Marketing"},
+  {v:"academics", label:"Academics — students, courses, batches", mods:"My Workspace, Academics"},
+  {v:"staff", label:"Basic staff — own workspace only", mods:"My Workspace, Marketing, Academics (no payments)"},
+];
+function accessOf(emp){
+  if(!emp) return "staff";
+  if(emp.access==="leadership") return "leadership";
+  if(Array.isArray(emp.modules)) return "custom";
+  if(ACCESS_LEVELS.some(a=>a.v===emp.access)) return emp.access;
+  if(/HR/i.test(emp.role||"")) return "hr";
+  if(/\b(CEO|COO|CMO|CTO|CFO|Chief|Founder)\b/i.test(emp.role||"")) return "leadership";
+  if(emp.dept==='Sales') return "sales";
+  return "staff";
+}
+function isHRRole(emp){ return !!emp && accessOf(emp)==="hr"; }
 // Leadership (founders/CXOs) keep full, unrestricted access — same as the pre-login default.
-function isLeadershipRole(emp){ return !!(emp && /\b(CEO|COO|CMO|CTO|CFO|Chief|Founder)\b/i.test(emp.role||"")); }
+function isLeadershipRole(emp){ return !!emp && accessOf(emp)==="leadership"; }
 // Sales gets its own restricted view: My Workspace (attendance, commission, leaderboard — see
 // SALES_WORKSPACE_SUB) + Students + Marketing and Sales, with full quotes/invoices/payment visibility
 // there (unlike Staff) since that's their day-to-day. No Dashboard, HR or Accounts.
-function isSalesRole(emp){ return !!(emp && emp.dept==='Sales'); }
+function isSalesRole(emp){ return !!emp && accessOf(emp)==="sales"; }
 // Everyone else (marketing/production/design/dev/account-management — the people who work on Demand School's
 // own student delivery) gets the restricted "Staff" view: My Workspace + Students + Marketing and Sales,
 // with no payment/financial detail and no Accounts/HR.
-function isStaffRole(emp){ return !!emp && !isHRRole(emp) && !isLeadershipRole(emp) && !isSalesRole(emp); }
+function isStaffRole(emp){ return !!emp && (["staff","marketing","academics"].includes(accessOf(emp)) || (accessOf(emp)==="custom" && !emp.modules.includes("accounts"))); }
 // A Sales sign-in's "My Workspace" is about their own performance, not student delivery work — swapped
 // in for the default (Staff-flavored) workspace sub-array by visibleModules() below.
 const SALES_WORKSPACE_SUB = [
@@ -2024,6 +2045,15 @@ const SALES_WORKSPACE_SUB = [
   {id:"leaderboard", label:"Leaderboard", icon:"i-target"},
 ];
 function visibleModules(){
+  if(currentUser && accessOf(currentUser)==='custom'){
+    const m = currentUser.modules, ids = ['workspace'];
+    if(m.includes('hr')) ids.push('hr');
+    if(m.includes('marketing') || m.includes('content')) ids.push('marketing');
+    if(m.includes('students')) ids.push('students');
+    if(m.includes('accounts')) ids.push('accounts');
+    return ids.map(id=>MODULES.find(x=>x.id===id)).map(x=>
+      x.id==='marketing' ? {...x, sub:x.sub.filter(sb=>m.includes('marketing') ? (sb.id!=='quotes' && sb.id!=='invoices') : sb.id==='content')} : x);
+  }
   if(currentUser && isHRRole(currentUser)) return MODULES.filter(m=>m.id==='hr');
   if(currentUser && isSalesRole(currentUser)){
     const order = ['workspace','marketing','students'];
@@ -2031,6 +2061,10 @@ function visibleModules(){
       m.id==='workspace' ? {...m, sub:SALES_WORKSPACE_SUB} : m
     );
   }
+  if(currentUser && accessOf(currentUser)==='finance') return ['workspace','accounts'].map(id=>MODULES.find(m=>m.id===id));
+  if(currentUser && accessOf(currentUser)==='marketing') return ['workspace','marketing'].map(id=>MODULES.find(m=>m.id===id)).map(m=>
+    m.id==='marketing' ? {...m, sub:m.sub.filter(s=>s.id!=='quotes' && s.id!=='invoices')} : m);
+  if(currentUser && accessOf(currentUser)==='academics') return ['workspace','students'].map(id=>MODULES.find(m=>m.id===id));
   if(currentUser && isStaffRole(currentUser)){
     const order = ['workspace','marketing','students'];
     return order.map(id=>MODULES.find(m=>m.id===id)).filter(Boolean).map(m=>
@@ -2838,8 +2872,8 @@ function hrDirectory(){
   <div class="panel">
     <div class="panel-head"><h3>Team directory</h3><div class="sub">${list.length} shown</div></div>
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Employee</th><th>ID</th><th>Department</th><th>Status</th><th>Employment</th><th>Joined</th><th class="num">Monthly gross</th></tr></thead>
-      <tbody>${list.length ? list.map(e=>`<tr class="row-click" onclick="openEmployeeDetail('${e.id}')"><td>${personCell(e)}</td><td class="muted mono">${e.id}</td><td>${esc(e.dept)}</td><td>${pill(e.empType, statusKind(e.empType))}</td><td>${e.employmentStatus==="Notice Period" ? pill("Notice · "+fmtDateShort(e.leavingDate), "warn") : `<span class="faint">Active</span>`}</td><td class="muted">${fmtDate(e.joined)}</td><td class="num mono">${inr(e.salary)}</td></tr>`).join("") : `<tr><td colspan="7"><div class="empty">No one matches your search.</div></td></tr>`}</tbody>
+      <thead><tr><th>Employee</th><th>ID</th><th>Department</th><th>Status</th><th>Employment</th><th>Joined</th><th class="num">Monthly gross</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map(e=>`<tr class="row-click" onclick="openEmployeeDetail('${e.id}')"><td>${personCell(e)}</td><td class="muted mono">${e.id}</td><td>${esc(e.dept)}</td><td>${pill(e.empType, statusKind(e.empType))}</td><td>${e.employmentStatus==="Notice Period" ? pill("Notice · "+fmtDateShort(e.leavingDate), "warn") : `<span class="faint">Active</span>`}</td><td class="muted">${fmtDate(e.joined)}</td><td class="num mono">${inr(e.salary)}</td><td class="num" style="white-space:nowrap;" onclick="event.stopPropagation()"><button class="btn btn-sm ghost" onclick="openEditEmployee('${e.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button> <button class="btn btn-sm danger" onclick="openDeleteEmployee('${e.id}')">Delete</button></td></tr>`).join("") : `<tr><td colspan="8"><div class="empty">No one matches your search.</div></td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
@@ -3540,6 +3574,43 @@ function saveGeneralPolicyNotes(){
 }
 
 /* ---- HR modals & actions ---- */
+// "Modules they can access" checkboxes, shared by Add and Edit employee. My Workspace is always included.
+// Leaving the boxes at their starting values keeps the automatic role-based access untouched.
+const MODULE_CHOICES = [
+  {v:"hr", label:"HR"}, {v:"marketing", label:"Marketing"}, {v:"students", label:"Academics"},
+  {v:"accounts", label:"Accounts"}, {v:"content", label:"Content pipeline only"},
+];
+const DEFAULT_MODULES = {hr:["hr"], finance:["accounts"], sales:["marketing","students"], marketing:["marketing"], academics:["students"], staff:["marketing","students"], leadership:["hr","marketing","students","accounts"]};
+function startingModules(emp){ const a = accessOf(emp); return a==="custom" ? emp.modules.slice() : (DEFAULT_MODULES[a] || []).slice(); }
+function accessPickerHtml(emp){
+  const isLead = !currentUser || isLeadershipRole(currentUser);
+  const cur = startingModules(emp), full = accessOf(emp)==="leadership";
+  const box = (v,label,dis)=>`<label class="chip" style="cursor:${dis?'not-allowed':'pointer'};display:inline-flex;align-items:center;gap:8px;${dis?'opacity:.55;':''}"><input type="checkbox" name="mod" value="${v}" ${cur.includes(v)?"checked":""} ${dis?"disabled":""} onchange="syncAccessBoxes()"> ${label}</label>`;
+  return `<div class="section-label">Modules they can access <span class="faint" style="text-transform:none;letter-spacing:0;">(My Workspace is always included)</span></div>
+      <div id="access-boxes" style="display:flex;flex-wrap:wrap;gap:8px;${full?'opacity:.5;':''}">${MODULE_CHOICES.map(c=>box(c.v,c.label,c.v==="accounts"&&!isLead)).join("")}</div>
+      ${isLead ? `<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;"><input type="checkbox" name="fullaccess" ${full?"checked":""} onchange="syncAccessBoxes()"> Full access — leadership (everything, including managing other people's access)</label>` : ""}
+      <div class="subtext" style="margin-top:6px;">Enforced on the server too, not just hidden in the menu. Only leadership can give Accounts or full access.</div>`;
+}
+function syncAccessBoxes(){
+  const full = document.querySelector('input[name=fullaccess]');
+  const wrap = document.getElementById('access-boxes');
+  if(wrap) wrap.style.opacity = (full && full.checked) ? '.5' : '';
+  const mk = document.querySelector('input[name=mod][value=marketing]'), ct = document.querySelector('input[name=mod][value=content]');
+  if(mk && ct && mk.checked) ct.checked = false;   // full Marketing already includes the content pipeline
+}
+// Writes the chosen access onto the employee record. Boxes left at their starting values change nothing.
+function applyAccessChoice(emp, f, startMods){
+  if(f.get("fullaccess")){ emp.access = "leadership"; delete emp.modules; return; }
+  const mods = f.getAll("mod");
+  const same = mods.length===startMods.length && mods.every(m=>startMods.includes(m));
+  if(same && accessOf(emp)!=="leadership") return;
+  emp.modules = mods;
+  if(emp.access==="leadership" || ACCESS_LEVELS.some(a=>a.v===emp.access)) delete emp.access;
+}
+function nextEmployeeId(){
+  const max = employees.reduce((m,e)=>{ const n=parseInt(String(e.id).replace(/\D/g,''),10); return n>m?n:m; }, 100);
+  return "EMP-"+(max+1);
+}
 function openAddEmployee(){
   showModal(`
     <div class="modal-head"><h3>Add employee</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
@@ -3560,6 +3631,7 @@ function openAddEmployee(){
       </div>
       <div><label class="field-label">Email</label><input class="field-input" type="email" name="email" required placeholder="name@demandschool.in"></div>
       <div><label class="field-label">Phone</label><input class="field-input" name="phone" required placeholder="+91 9xxxx xxxxx"></div>
+      ${accessPickerHtml({dept:"", role:""})}
       <div class="section-label">ERP access</div>
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>Their ERP login is the email above — set a password here so they can sign in.</div></div>
       <div><label class="field-label">Set ERP password</label><input class="field-input" type="password" name="password" required minlength="8" maxlength="200" autocomplete="new-password" placeholder="At least 8 characters, letters and numbers"></div>
@@ -3569,10 +3641,11 @@ function openAddEmployee(){
   document.getElementById("f-add-employee").addEventListener("submit", e=>{
     e.preventDefault();
     const f = new FormData(e.target);
-    const id = "EMP-"+(100+employees.length+1);
+    const id = nextEmployeeId();
     const name = f.get("name");
     const isGuest = f.get("empType")==="Guest Trainer";
     employees.push({id,name,dept:f.get("dept"),role:f.get("role"),joined:f.get("joined"),dob:f.get("dob"),email:f.get("email"),phone:f.get("phone"),salary:isGuest?0:Number(f.get("salary")),hourlyRate:isGuest?Number(f.get("hourlyRate"))||0:undefined,empType:f.get("empType"),employmentStatus:"Active"});
+    applyAccessChoice(employees[employees.length-1], f, DEFAULT_MODULES.staff);
     grantLogin("staff", id, String(f.get("email")||"").trim(), f.get("password"));
     attendanceToday[id] = {status:"present",in:"09:30"};
     toast("Employee added"); closeModal(); render();
@@ -3677,8 +3750,43 @@ function openSalaryRevision(id){
     openEmployeeDetail(e.id); render();
   });
 }
+// Permanent delete: removes the login first (the server checks the permission while the record still exists),
+// then the employee and everything that points at them, so no screen is left looking up a missing person.
+function openDeleteEmployee(id){
+  const e = byId(id); if(!e) return;
+  const blocked = (currentUser && currentUser.id===id) ? "You can't delete your own account."
+    : (isLeadershipRole(e) && !isLeadershipRole(currentUser)) ? "Only leadership can delete a leadership account." : "";
+  showModal(`
+    <div class="modal-head"><h3>Delete employee</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body">
+      <div class="person" style="margin-bottom:8px;">${personCell(e)}</div>
+      ${blocked ? `<div class="banner"><div>${esc(blocked)}</div></div>` : `<div class="banner"><svg class="icon" style="width:15px;height:15px"><use href="#i-bell"/></svg><div><b>This cannot be undone.</b> ${esc(e.name)}'s ERP login is removed, and so are their leave, advance, payment and withdrawal requests, attendance and payroll entries. If you only want them to lose access but keep history, use Mark notice period instead.</div></div>`}
+    </div>
+    <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button class="btn ghost" onclick="closeModal()">Cancel</button>${blocked?"":`<button class="btn danger" onclick="deleteEmployee('${e.id}')">Delete permanently</button>`}</div></div>`);
+}
+async function deleteEmployee(id){
+  const i = employees.findIndex(x=>x.id===id); if(i<0) return;
+  try{
+    await saveNow();
+    await api('users', { method:'POST', body:{ action:'delete', refId:id } });
+  }catch(err){ toast("Not deleted: "+err.message); return; }
+  const name = employees[i].name;
+  employees.splice(i,1);
+  leaveRequests = leaveRequests.filter(x=>x.empId!==id);
+  advances = advances.filter(x=>x.empId!==id);
+  paymentRequests = paymentRequests.filter(x=>x.empId!==id);
+  withdrawalRequests = withdrawalRequests.filter(x=>x.empId!==id);
+  sessionLogs = sessionLogs.filter(x=>x.empId!==id);
+  commissionWithdrawals = commissionWithdrawals.filter(x=>x.empId!==id);
+  Object.values(attendanceByDate).forEach(rec=>{ if(rec) delete rec[id]; });
+  delete monthPresentDays[id];
+  Object.values(payroll.history).forEach(h=>{ if(h && h.entries) delete h.entries[id]; });
+  if(selectedAttendanceEmp===id) selectedAttendanceEmp = employees[0] ? employees[0].id : null;
+  toast(name+" deleted"); closeModal(); render();
+}
 function openEditEmployee(id){
   const e = byId(id);
+  const startMods = startingModules(e);
   showModal(`
     <div class="modal-head"><h3>Edit employee</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-edit-employee"><div class="modal-body">
@@ -3698,6 +3806,7 @@ function openEditEmployee(id){
       </div>
       <div><label class="field-label">Email</label><input class="field-input" type="email" name="email" required value="${esc(e.email)}"></div>
       <div><label class="field-label">Phone</label><input class="field-input" name="phone" required value="${esc(e.phone)}"></div>
+      ${accessPickerHtml(e)}
       <div class="section-label">ERP access</div>
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>Set or reset their ERP password here. Leave it blank to keep the current one. Passwords are stored only as a salted hash.</div></div>
       <div><label class="field-label">ERP password</label><input class="field-input" type="password" name="password" minlength="8" maxlength="200" autocomplete="new-password" placeholder="Leave blank to keep current password"></div>
@@ -3714,6 +3823,7 @@ function openEditEmployee(id){
       hourlyRate: isGuest?Number(f.get("hourlyRate"))||0:e.hourlyRate,
       email: f.get("email"), phone: f.get("phone"), empType: f.get("empType")
     });
+    applyAccessChoice(e, f, startMods);
     // Only overwrite the password when a new one is actually entered — an empty field means "keep it
     // as is", never "clear it", so an existing sign-in never silently breaks.
     const newPw = (f.get("password")||"").trim();
@@ -7141,7 +7251,7 @@ async function bootSession(user, writable, readable){
   applyCurrentUser(emp);
   // Land each sign-in on the right home screen — HR only ever sees the HR module, and Staff/Sales land
   // on their own personal workspace, so start there instead of the full company Dashboard.
-  nav.module = isHRRole(emp) ? 'hr' : ((isStaffRole(emp) || isSalesRole(emp)) ? 'workspace' : 'dashboard');
+  nav.module = isHRRole(emp) ? 'hr' : (isLeadershipRole(emp) ? 'dashboard' : 'workspace');
   {
     const landingMod = visibleModules().find(m=>m.id===nav.module);
     nav.sub[nav.module] = (landingMod && landingMod.sub && landingMod.sub.length) ? landingMod.sub[0].id : (nav.sub[nav.module] || 'overview');
