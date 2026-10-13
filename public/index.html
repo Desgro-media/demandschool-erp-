@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Demand School ERP</title>
+<script>try{var t=localStorage.getItem('ds-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -335,6 +336,8 @@
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M17.5 4v3.2h-3.2M6.5 20v-3.2h3.2"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3"/></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.3 5.3 1.3 5.3H4.7S6 14 6 10Z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M3 10v4h3l9 4V6l-9 4H3Z"/><path d="M18 9a4 4 0 0 1 0 6"/><path d="M7 14v4a1.5 1.5 0 0 0 3 0v-3"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
@@ -428,7 +431,7 @@
   <div class="main">
     <div class="topbar">
       <div class="topbar-title" id="student-topbar-title"></div>
-      <div class="topbar-right"><div class="date-chip" data-date-chip></div></div>
+      <div class="topbar-right"><div class="date-chip" data-date-chip></div><button class="icon-btn theme-toggle" title="Toggle light / dark theme" aria-label="Toggle light / dark theme" onclick="toggleTheme()"><svg class="icon"><use href="#i-moon"/></svg></button></div>
     </div>
     <div class="content" id="student-content"></div>
   </div>
@@ -451,6 +454,7 @@
       <div class="topbar-right">
         <div class="date-chip" data-date-chip></div>
         <div class="search"><svg class="icon" style="width:14px;height:14px"><use href="#i-search"/></svg><input placeholder="Search…" id="global-search"></div>
+        <button class="icon-btn theme-toggle" title="Toggle light / dark theme" aria-label="Toggle light / dark theme" onclick="toggleTheme()"><svg class="icon"><use href="#i-moon"/></svg></button>
         <div class="icon-btn"><svg class="icon"><use href="#i-bell"/></svg></div>
         <div class="avatar" id="topbar-avatar">TH</div>
       </div>
@@ -6923,6 +6927,24 @@ async function api(path, opts){
 
 // Creates or resets a login on the server. The password is sent once over HTTPS and stored only as a
 // scrypt hash; it never enters the in-browser data (or the saved state) at all.
+/* ---- light / dark theme: remembered per browser; with no choice saved it follows the system setting ---- */
+function currentTheme(){
+  const t = document.documentElement.getAttribute('data-theme');
+  if(t==='light' || t==='dark') return t;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function syncThemeIcons(){
+  const dark = currentTheme()==='dark';
+  document.querySelectorAll('.theme-toggle use').forEach(u=>u.setAttribute('href', dark ? '#i-sun' : '#i-moon'));
+}
+function toggleTheme(){
+  const next = currentTheme()==='dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('ds-theme', next); }catch(e){}
+  syncThemeIcons();
+}
+syncThemeIcons();
+if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncThemeIcons);
 async function grantLogin(kind, refId, email, password){
   if(!password) return;
   try{
