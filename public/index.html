@@ -4805,7 +4805,7 @@ function courseDetailPage(name){
         </div>
         ${cs.description?`<div class="subtext" style="margin:2px 0 16px;">${esc(cs.description)}</div>`:''}
         <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Syllabus<button class="btn btn-sm ghost" onclick="openEditSyllabus(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>${syllabusOf(name).length?'Edit syllabus':'Add syllabus'}</button></div>
-        ${syllabusListHTML(name)}
+        ${syllabusListHTML(name,true)}
         <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Batches<button class="btn btn-sm ghost" onclick="openAddBatch(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Start new batch</button></div>
         ${bList.length?`<div class="table-wrap"><table class="data"><thead><tr><th>Batch</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Schedule</th><th class="num">Students</th><th></th></tr></thead>
           <tbody>${bList.map(b=>`<tr><td style="font-weight:700;">${esc(b.label)}</td><td class="muted">${fmtDate(b.startDate)}</td><td class="muted">${b.endDate?fmtDate(b.endDate):'<span class="faint">—</span>'}</td><td>${pill(batchStatus(b),batchStatusKind(batchStatus(b)))}</td><td class="muted">${batchScheduleLabel(b)}</td><td class="num mono">${batchStudents(b.id).length}</td><td><div style="display:flex;gap:6px;"><button class="btn btn-sm ghost" onclick="openBatchDetail('${b.id}')">View</button><button class="btn btn-sm ghost" onclick="openEditBatch('${b.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></div></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">No batches started for this course yet.</div>`}
@@ -4861,15 +4861,19 @@ function openCourseSettings(name){
 // Read-only render of a course's syllabus — an ordered list of modules, each with a title, an optional
 // duration and a bullet list of topics. Used on the Course detail page (staff) and, unmodified, on the
 // student portal's own Syllabus tab, so both sides see exactly the same curriculum outline.
-function syllabusListHTML(name){
+function syllabusListHTML(name, editable){
   const mods = syllabusOf(name);
   if(!mods.length) return `<div class="empty">No syllabus added for this course yet.</div>`;
   return `<div class="stack" style="gap:10px;">${mods.map((m,idx)=>`
+    ${m.week && m.week!==(mods[idx-1]||{}).week ? `<div style="font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-top:${idx?8:0}px;">${esc(m.week)}</div>` : ''}
     <div class="panel" style="box-shadow:none;">
       <div class="panel-body" style="display:flex;flex-direction:column;gap:6px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-          <div style="font-weight:800;font-size:13.5px;">Module ${idx+1}: ${esc(m.title||'Untitled module')}</div>
-          ${m.duration?`<span class="pill neutral">${esc(m.duration)}</span>`:''}
+          <div style="font-weight:800;font-size:13.5px;">${esc(m.label||('Module '+(idx+1)))}: ${esc(m.title||'Untitled module')}</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${m.duration?`<span class="pill neutral">${esc(m.duration)}</span>`:''}
+            ${editable?`<button class="btn btn-sm ghost" onclick="openEditSyllabusModule(${jsq(name)},${idx})"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button><button class="btn btn-sm danger" onclick="openDeleteSyllabusModule(${jsq(name)},${idx})">Delete</button>`:''}
+          </div>
         </div>
         ${m.topics?`<ul style="margin:2px 0 0 18px;padding:0;color:var(--ink-soft);font-size:12.5px;line-height:1.7;">${String(m.topics).split("\n").map(t=>t.trim()).filter(Boolean).map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:''}
       </div>
@@ -4884,6 +4888,8 @@ function readCourseDraftSyllabusFromDOM(){
   document.querySelectorAll('#syllabus-rows [data-syl-row]').forEach(rowEl=>{
     const i = rowEl.dataset.sylRow;
     rows.push({
+      week: (rowEl.querySelector(`[name="sylWeek${i}"]`)||{}).value || "",
+      label: (rowEl.querySelector(`[name="sylLabel${i}"]`)||{}).value || "",
       title: (rowEl.querySelector(`[name="sylTitle${i}"]`)||{}).value || "",
       duration: (rowEl.querySelector(`[name="sylDuration${i}"]`)||{}).value || "",
       topics: (rowEl.querySelector(`[name="sylTopics${i}"]`)||{}).value || "",
@@ -4904,6 +4910,10 @@ function syllabusDraftRowsHTML(){
         </div>
       </div>
       <div class="field-row">
+        <div><label class="field-label">Section <span class="faint">(optional, e.g. Week 1)</span></label><input class="field-input" name="sylWeek${i}" value="${esc(String(m.week||''))}"></div>
+        <div><label class="field-label">Label <span class="faint">(optional, e.g. Day 1)</span></label><input class="field-input" name="sylLabel${i}" value="${esc(String(m.label||''))}"></div>
+      </div>
+      <div class="field-row">
         <div><label class="field-label">Title</label><input class="field-input" name="sylTitle${i}" placeholder="e.g. Fundamentals of Content Strategy" value="${esc(String(m.title||''))}"></div>
         <div><label class="field-label">Duration <span class="faint">(optional)</span></label><input class="field-input" name="sylDuration${i}" placeholder="e.g. 2 sessions / 1 week" value="${esc(String(m.duration||''))}"></div>
       </div>
@@ -4917,13 +4927,13 @@ function refreshSyllabusRows(){
 }
 function addSyllabusRow(){
   courseDraftSyllabus = readCourseDraftSyllabusFromDOM();
-  courseDraftSyllabus.push({title:"",duration:"",topics:""});
+  courseDraftSyllabus.push({week:"",label:"",title:"",duration:"",topics:""});
   refreshSyllabusRows();
 }
 function removeSyllabusRow(idx){
   courseDraftSyllabus = readCourseDraftSyllabusFromDOM();
   courseDraftSyllabus.splice(idx,1);
-  if(!courseDraftSyllabus.length) courseDraftSyllabus.push({title:"",duration:"",topics:""});
+  if(!courseDraftSyllabus.length) courseDraftSyllabus.push({week:"",label:"",title:"",duration:"",topics:""});
   refreshSyllabusRows();
 }
 function moveSyllabusRow(idx, dir){
@@ -4933,13 +4943,192 @@ function moveSyllabusRow(idx, dir){
   const tmp = courseDraftSyllabus[idx]; courseDraftSyllabus[idx] = courseDraftSyllabus[j]; courseDraftSyllabus[j] = tmp;
   refreshSyllabusRows();
 }
+// PDF import — reads the PDF in the browser (pdf.js is bundled under /vendor/pdfjs, nothing is uploaded),
+// pulls out the text line by line and guesses the module structure. The result only fills the form rows;
+// the admin reviews/edits them and still presses "Save syllabus", so a wrong guess never reaches students.
+let pdfJsLoading = null;
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(pdfJsLoading) return pdfJsLoading;
+  pdfJsLoading = new Promise((resolve, reject)=>{
+    const sc = document.createElement("script");
+    sc.src = "/vendor/pdfjs/pdf.min.js";
+    sc.onload = ()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs/pdf.worker.min.js"; resolve(window.pdfjsLib); };
+    sc.onerror = ()=>{ pdfJsLoading = null; reject(new Error("Could not load the PDF reader")); };
+    document.head.appendChild(sc);
+  });
+  return pdfJsLoading;
+}
+async function pdfToLines(file){
+  const lib = await loadPdfJs();
+  const pdf = await lib.getDocument({data: await file.arrayBuffer(), isEvalSupported:false}).promise;
+  const lines = [];
+  for(let n=1; n<=Math.min(pdf.numPages,150); n++){
+    const content = await (await pdf.getPage(n)).getTextContent();
+    const rows = [];
+    content.items.forEach(it=>{
+      if(!it.str || !it.str.trim()) return;
+      const y = it.transform[5], x = it.transform[4];
+      let row = rows.find(r=>Math.abs(r.y-y)<=2.5);
+      if(!row){ row = {y, parts:[]}; rows.push(row); }
+      row.parts.push({x, str:it.str});
+    });
+    rows.sort((a,b)=>b.y-a.y).forEach(r=>{
+      const t = r.parts.sort((a,b)=>a.x-b.x).map(q=>q.str).join(" ").replace(/\s+/g," ").trim();
+      if(t && !/^(page\s*)?\d{1,3}(\s*(of|\/)\s*\d{1,3})?$/i.test(t)) lines.push(t);
+    });
+  }
+  return lines;
+}
+const SYL_BULLET = /^\s*(?:[•●▪■◦○▫➢➤►▶✓✔✦–—*-]|\d+\.\d+[.)]?|[a-z][.)])\s+/;
+// Item-level headings ("Day 3 – …", "Module 2: …") and group-level headings ("Week 1: …", "Phase 2 …").
+const SYL_ITEM_HEAD = /^\s*(day|module|unit|chapter|session|lesson)\s*[-#:]?\s*(\d+|[ivxl]+)\b\s*[:.\-–—)]*\s*/i;
+const SYL_FLAT_HEAD = /^\s*(module|unit|chapter|week|session|part|phase|lesson|topic|day|section)\s*[-#:]?\s*(\d+|[ivxl]+)\b\s*[:.\-–—)]*\s*/i;
+const SYL_GROUP = /\b(week|phase|part|term|semester|level)\s*[-#]?\s*(\d+|[ivxl]+)\b\s*[:.\-–—)]*\s*(.*)$/i;
+const SYL_DURATION = /\(?\b(\d+(?:\.\d+)?\s*(?:-|to)?\s*\d*\s*(?:hours?|hrs?|days?|weeks?|wks?|sessions?|classes|months?|mins?|minutes?))\b\)?/i;
+const capWord = w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
+function parseSyllabusLines(lines){
+  const isBullet = l=>SYL_BULLET.test(l);
+  const stripBullet = l=>l.replace(SYL_BULLET,"").trim();
+  const idx = fn=>lines.map((_,i)=>i).filter(fn);
+  const numbered = i=>/^\s*\d{1,2}[.)]\s+\S/.test(lines[i]) && !/^\s*\d+\.\d+/.test(lines[i]);
+  const caps = i=>{ const l=lines[i]; return !isBullet(l) && l.length<=70 && /[A-Z]{3}/.test(l) && l===l.toUpperCase() && l.replace(/[^A-Za-z]/g,"").length>=4; };
+
+  // 1) pick the heading style that actually splits the document
+  let mode = "item", heads = idx(i=>SYL_ITEM_HEAD.test(lines[i]));
+  if(heads.length<2){ mode = "flat"; heads = idx(i=>SYL_FLAT_HEAD.test(lines[i])); }
+  if(heads.length<2){ mode = "num"; heads = idx(numbered); }
+  if(heads.length<2){ mode = "caps"; heads = idx(caps); }
+  if(heads.length<2){ mode = "lead"; heads = idx(i=>!isBullet(lines[i]) && lines[i].length<=80 && i+1<lines.length && isBullet(lines[i+1])); }
+  if(!heads.length) return [];
+
+  // 2) group headings (e.g. "Week 1: …") — only meaningful above item-level headings like "Day N"
+  const groups = [];
+  if(mode==="item"){
+    lines.forEach((l,i)=>{
+      if(isBullet(l) || heads.includes(i)) return;
+      const m = l.match(SYL_GROUP); if(!m) return;
+      let rest = m[3].trim();
+      const nx = lines[i+1], after = lines[i+2];
+      if(nx && !isBullet(nx) && !heads.includes(i+1) && nx.length<=60 && /^[A-Z]/.test(nx) && !/[.,;]$/.test(l) && after!==undefined && (isBullet(after)||heads.includes(i+2)||SYL_GROUP.test(after))) rest = (rest+" "+nx).trim();
+      groups.push({i, text: `${capWord(m[1])} ${m[2]}`+(rest?`: ${rest}`:"")});
+    });
+  }
+  const weekAt = h=>{ let w=""; groups.forEach(g=>{ if(g.i<h) w=g.text; }); return w; };
+
+  // 3) cut each heading's body, stopping at the next heading or group heading
+  const mods = [];
+  const push = (m)=>{ if(m.title || m.topics) mods.push(m); };
+  heads.forEach((h,k)=>{
+    let end = k+1<heads.length ? heads[k+1] : lines.length;
+    groups.forEach(g=>{ if(g.i>h && g.i<end) end = g.i; });
+    const week = weekAt(h);
+    let title = lines[h], label = "";
+    if(mode==="item" || mode==="flat"){
+      const m = title.match(mode==="item" ? SYL_ITEM_HEAD : SYL_FLAT_HEAD);
+      if(m){ if(!/^module$/i.test(m[1])) label = `${capWord(m[1])} ${m[2].toUpperCase()}`; title = title.slice(m[0].length); }
+    } else if(mode==="num") title = title.replace(/^\s*\d{1,2}[.)]\s+/,"");
+    let body = lines.slice(h+1,end);
+    if(!title.trim() && body.length && !isBullet(body[0])) title = body.shift();
+    // A short Capitalised non-bullet line after bullets starts a new section (e.g. "Expected Learning Outcomes")
+    let cut = -1;
+    for(let j=1;j<body.length;j++){
+      const l = body[j];
+      if(!isBullet(l) && isBullet(body[j-1]) && l.length<=60 && /^[A-Z]/.test(l) && !/[.,;:]$/.test(l)){ cut = j; break; }
+    }
+    const tail = cut>=0 ? body.splice(cut) : [];
+    let duration = "";
+    const dm = title.match(SYL_DURATION);
+    if(dm && title.replace(dm[0],"").replace(/[\s()\-–—:|,]/g,"").length>=3){ duration = dm[1].trim(); title = title.replace(dm[0],""); }
+    title = title.replace(/[\s:|\-–—,]+$/,"").replace(/^[\s:|\-–—,]+/,"").trim();
+    const topics = [];
+    body.forEach(l=>{
+      const t = stripBullet(l); if(!t) return;
+      const m = t.match(/^(?:duration|time|length)\s*[:\-–]\s*(.+)$/i);
+      if(m && !duration){ duration = m[1].trim(); return; }
+      topics.push(t);
+    });
+    push({week, label, title: title || label || `Module ${mods.length+1}`, duration, topics: topics.join("\n")});
+    if(tail.length) push({week, label:"", title: tail[0].trim(), duration:"", topics: tail.slice(1).map(stripBullet).filter(Boolean).join("\n")});
+  });
+  return mods;
+}
+async function importSyllabusPdf(input){
+  const file = input.files && input.files[0];
+  const status = document.getElementById("syllabus-pdf-status");
+  input.value = "";
+  if(!file) return;
+  const say = (t,bad)=>{ if(status){ status.textContent = t; status.style.color = bad ? "var(--neg, #d33)" : ""; } };
+  if(!/\.pdf$/i.test(file.name) && file.type!=="application/pdf"){ say("Please choose a PDF file.", true); return; }
+  if(file.size > 15*1024*1024){ say("That PDF is over 15 MB.", true); return; }
+  say("Reading "+file.name+"…");
+  try{
+    const lines = await pdfToLines(file);
+    if(!lines.length){ say("No text found — this looks like a scanned PDF. Please enter the modules manually.", true); return; }
+    const mods = parseSyllabusLines(lines);
+    if(!mods.length){ say("Couldn't detect any modules in this PDF. Please enter them manually.", true); return; }
+    const current = readCourseDraftSyllabusFromDOM().filter(m=>(m.title||m.duration||m.topics).trim());
+    courseDraftSyllabus = current.concat(mods);
+    refreshSyllabusRows();
+    say(`Added ${mods.length} module${mods.length===1?"":"s"} from ${file.name}. Please review and edit before saving.`);
+  }catch(err){ console.error(err); say("Couldn't read that PDF ("+(err.message||"error")+"). Please enter the modules manually.", true); }
+}
+// Edit / delete a single module straight from the course page (the full "Edit syllabus" dialog still
+// handles bulk changes, reordering and PDF import).
+function saveSyllabusModules(name, mods, msg){
+  courseSettings[name] = {...courseSettingsOf(name), syllabus: mods};
+  toast(msg); closeModal(); render();
+}
+function openEditSyllabusModule(name, idx){
+  const m = syllabusOf(name)[idx]; if(!m) return;
+  showModal(`
+    <div class="modal-head"><h3>Edit ${esc(m.label||("Module "+(idx+1)))}</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <form id="f-edit-syl-module"><div class="modal-body">
+      <div class="field-row">
+        <div><label class="field-label">Section <span class="faint">(optional, e.g. Week 1)</span></label><input class="field-input" name="week" value="${esc(String(m.week||''))}"></div>
+        <div><label class="field-label">Label <span class="faint">(optional, e.g. Day 1)</span></label><input class="field-input" name="label" value="${esc(String(m.label||''))}"></div>
+      </div>
+      <div class="field-row">
+        <div><label class="field-label">Title</label><input class="field-input" name="title" required value="${esc(String(m.title||''))}"></div>
+        <div><label class="field-label">Duration <span class="faint">(optional)</span></label><input class="field-input" name="duration" placeholder="e.g. 2 sessions / 1 week" value="${esc(String(m.duration||''))}"></div>
+      </div>
+      <div><label class="field-label">Topics covered <span class="faint">(one per line)</span></label><textarea class="field-input" name="topics" rows="8" placeholder="One topic per line">${esc(String(m.topics||''))}</textarea></div>
+    </div>
+    <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Save module</button></div></div>
+    </form>`, true);
+  document.getElementById("f-edit-syl-module").addEventListener("submit", e=>{
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const title = String(f.get("title")||"").trim(); if(!title) return;
+    const mods = syllabusOf(name).map(x=>({...x}));
+    mods[idx] = {week:String(f.get("week")||"").trim(), label:String(f.get("label")||"").trim(), title, duration:String(f.get("duration")||"").trim(), topics:String(f.get("topics")||"")};
+    saveSyllabusModules(name, mods, "Module updated");
+  });
+}
+function openDeleteSyllabusModule(name, idx){
+  const m = syllabusOf(name)[idx]; if(!m) return;
+  showModal(`
+    <div class="modal-head"><h3>Delete ${esc(m.label||("Module "+(idx+1)))}?</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body"><div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-archive"/></svg><div>"${esc(m.title||'Untitled module')}" will be removed from the ${esc(name)} syllabus, including students' view of it. The remaining modules are renumbered.</div></div></div>
+    <div class="modal-foot"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="button" class="btn danger" onclick="performDeleteSyllabusModule(${jsq(name)},${idx})">Delete</button></div>`);
+}
+function performDeleteSyllabusModule(name, idx){
+  const mods = syllabusOf(name).map(x=>({...x}));
+  mods.splice(idx,1);
+  saveSyllabusModules(name, mods, "Module deleted");
+}
 function openEditSyllabus(name){
   courseDraftSyllabus = syllabusOf(name).map(m=>({...m}));
-  if(!courseDraftSyllabus.length) courseDraftSyllabus.push({title:"",duration:"",topics:""});
+  if(!courseDraftSyllabus.length) courseDraftSyllabus.push({week:"",label:"",title:"",duration:"",topics:""});
   showModal(`
     <div class="modal-head"><h3>Syllabus — ${esc(name)}</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-edit-syllabus"><div class="modal-body">
       <div class="subtext">Break the course into modules, in the order students will go through them. Students see this exact list — title, duration and topics — on their own portal. This is separate from a batch's dated Academic Calendar.</div>
+      <div class="panel" style="box-shadow:none;"><div class="panel-body" style="display:flex;flex-direction:column;gap:6px;">
+        <label class="field-label">Import from PDF <span class="faint">(optional)</span></label>
+        <input class="field-input" type="file" accept="application/pdf,.pdf" onchange="importSyllabusPdf(this)">
+        <div class="subtext" id="syllabus-pdf-status">Upload a syllabus PDF and the modules, durations and topics are filled in for you. No PDF? Just type the modules below.</div>
+      </div></div>
       <div id="syllabus-rows" style="display:flex;flex-direction:column;gap:10px;">${syllabusDraftRowsHTML()}</div>
       <button type="button" class="btn btn-sm ghost" onclick="addSyllabusRow()" style="align-self:flex-start;"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Add module</button>
     </div>
