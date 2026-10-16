@@ -983,11 +983,38 @@ function batchCalendarRowsHTML(b, readOnly){
 // batch's academic calendar. Trainer is either a staff pick from Academics (or, if none teach this
 // batch's course, the wider staff directory) or a free-typed guest trainer name — a course session
 // often brings in someone outside the regular training team for a one-off topic.
+// Syllabus ↔ academic calendar. Each syllabus module (e.g. "Day 1: Virality & Content Ideation") can be
+// scheduled as a calendar day; the Topic box is pre-filled with the first module of the course's syllabus
+// that this batch hasn't scheduled yet, so the calendar simply walks down the syllabus in order.
+const sylKey = (m,i)=>`${m.label||('Module '+(i+1))}|${m.title||''}`;
+const sylTopicText = (m,i)=>`${m.label||('Module '+(i+1))}: ${m.title||'Untitled module'}`;
+function batchSyllabusStatus(b, existing){
+  const mods = syllabusOf(b.course);
+  const others = calendarOf(b).filter(x=>x!==existing);
+  const refs = new Set(others.map(x=>x.syllabusRef).filter(Boolean));
+  const texts = new Set(others.map(x=>(x.topic||'').trim()));
+  const items = mods.map((m,i)=>({key:sylKey(m,i), text:sylTopicText(m,i), done: refs.has(sylKey(m,i)) || texts.has(sylTopicText(m,i)) || texts.has((m.title||'').trim())}));
+  return {items, next: items.find(x=>!x.done) || null};
+}
+function pickCalSyllabusTopic(sel){
+  const opt = sel.options[sel.selectedIndex];
+  const input = sel.form && sel.form.querySelector('[name="topic"]');
+  if(input && opt && opt.dataset.text) input.value = opt.dataset.text;
+}
 function calendarSessionForm(b, existing){
   const staffOptions = employees.filter(e=>e.dept==='Academics');
   const trainerType = existing ? (existing.trainerType||'staff') : 'staff';
   const staffName = trainerType==='staff' ? (existing?existing.trainerName:'') : '';
   const guestName = trainerType==='guest' ? (existing?existing.trainerName:'') : '';
+  const syl = batchSyllabusStatus(b, existing);
+  const chosen = existing ? (existing.syllabusRef||'') : (syl.next ? syl.next.key : '');
+  const topicValue = existing ? (existing.topic||'') : (syl.next ? syl.next.text : '');
+  const sylBlock = syl.items.length ? `
+    <div><label class="field-label">From syllabus <span class="faint">(${syl.next||existing?'next topic is pre-selected':'every syllabus topic is already scheduled'})</span></label>
+      <select class="field-input" name="syllabusRef" onchange="pickCalSyllabusTopic(this)">
+        <option value="" data-text="">Custom topic (type below)</option>
+        ${syl.items.map(x=>`<option value="${esc(x.key)}" data-text="${esc(x.text)}" ${x.key===chosen?'selected':''}>${x.done?'✓ ':''}${esc(x.text)}</option>`).join('')}
+      </select></div>` : '';
   return `
     <div><label class="field-label">Date</label><input class="field-input" type="date" name="date" required value="${existing?esc(existing.date||''):TODAY}"></div>
     <div class="field-row">
@@ -1004,7 +1031,8 @@ function calendarSessionForm(b, existing){
         <input class="field-input" name="guestName" placeholder="e.g. Ramesh Iyer (Brand Consultant)" value="${esc(guestName)}">
       </div>
     </div>
-    <div><label class="field-label">Topic</label><input class="field-input" name="topic" required placeholder="e.g. Customer research and ICP mapping" value="${existing?esc(existing.topic||''):''}"></div>`;
+    ${sylBlock}
+    <div><label class="field-label">Topic</label><input class="field-input" name="topic" required placeholder="e.g. Customer research and ICP mapping" value="${esc(topicValue)}"></div>`;
 }
 function toggleCalTrainerFields(v){
   const staffEl = document.getElementById('cal-staff-field');
@@ -1023,7 +1051,7 @@ function openAddCalendarSession(batchId, insertAt){
     e.preventDefault();
     const f = new FormData(e.target);
     const trainerType = f.get("trainerType");
-    const session = {id:nextCalSessionId(), date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic")};
+    const session = {id:nextCalSessionId(), date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic"), syllabusRef:f.get("syllabusRef")||""};
     const cal = ensureBatchCalendar(b);
     if(insertAt==null || insertAt<0 || insertAt>cal.length) cal.push(session);
     else cal.splice(insertAt, 0, session);
@@ -1043,7 +1071,7 @@ function openEditCalendarSession(batchId, sessionId){
     e.preventDefault();
     const f = new FormData(e.target);
     const trainerType = f.get("trainerType");
-    Object.assign(s, {date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic")});
+    Object.assign(s, {date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic"), syllabusRef:f.get("syllabusRef")||""});
     toast("Day updated"); closeModal(); openBatchDetail(batchId);
   });
 }
