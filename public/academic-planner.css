@@ -1,0 +1,10 @@
+.academic-planner-page { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.academic-planner-table { min-width: 1050px; }
+.academic-planner-table td { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 110px; max-width: 300px; vertical-align: top; }
+.academic-planner-table td:nth-child(3), .academic-planner-table td:nth-child(5), .academic-planner-table td:nth-child(6) { min-width: 180px; }
+@media (max-width: 700px) {
+  .academic-planner-page .panel-head { flex-wrap: wrap; gap: 10px; }
+}
+
+.academic-import-row { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; }
+.academic-import-row summary { cursor: pointer; padding: 12px; overflow-wrap: anywhere; }
