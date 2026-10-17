@@ -1,4 +1,5 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><link rel="stylesheet" href="/academic-planner.css">
+</head><body>
 <title>Demand School ERP</title>
 <script>try{var t=localStorage.getItem('ds-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -319,6 +320,7 @@
   @media (max-width: 1040px){ .app{grid-template-columns:1fr;} .side{display:none;} }
   @media (max-width: 860px){ .kpi-grid,.kpi-grid.cols-5{grid-template-columns:repeat(2,1fr);} .grid-2{grid-template-columns:1fr;} .field-row,.field-row.cols-3{grid-template-columns:1fr;} .cal-day{min-height:44px;padding:4px;} .cal-badge{font-size:8px;} .cal-daynum{font-size:10.5px;} }
 </style>
+<link rel="stylesheet" href="/mobile.css">
 
 <svg width="0" height="0" style="position:absolute">
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-6h2v6h5v-9"/></symbol>
@@ -468,6 +470,8 @@
 </div>
 <div id="toast-root"></div>
 
+<script src="/academic-planner.js"></script>
+<script src="/academic-pdf.js"></script>
 <script>
 /* =============================================================================
    DEMAND SCHOOL ERP — UI reference build. Single-file HTML/CSS/JS, in-memory
@@ -1016,7 +1020,7 @@ function calendarSessionForm(b, existing){
         ${syl.items.map(x=>`<option value="${esc(x.key)}" data-text="${esc(x.text)}" ${x.key===chosen?'selected':''}>${x.done?'✓ ':''}${esc(x.text)}</option>`).join('')}
       </select></div>` : '';
   return `
-    <div><label class="field-label">Date</label><input class="field-input" type="date" name="date" required value="${existing?esc(existing.date||''):TODAY}"></div>
+    <div><label class="field-label">Date (optional)</label><input class="field-input" type="date" name="date" value="${existing?esc(existing.date||''):TODAY}"></div>
     <div class="field-row">
       <div><label class="field-label">Trainer type</label><select class="field-input" name="trainerType" onchange="toggleCalTrainerFields(this.value)">
         <option value="staff" ${trainerType==='staff'?'selected':''}>Staff trainer</option>
@@ -1024,7 +1028,7 @@ function calendarSessionForm(b, existing){
       </select></div>
       <div id="cal-staff-field" style="${trainerType==='guest'?'display:none;':''}">
         <label class="field-label">Trainer</label>
-        <select class="field-input" name="staffTrainer">${staffOptions.map(e=>`<option ${e.name===staffName?'selected':''}>${esc(e.name)}</option>`).join('') || '<option value="">— none —</option>'}</select>
+        <select class="field-input" name="staffTrainer"><option value="">— Unassigned —</option>${staffName && !staffOptions.some(e=>e.name===staffName)?`<option selected>${esc(staffName)}</option>`:''}${staffOptions.map(e=>`<option ${e.name===staffName?'selected':''}>${esc(e.name)}</option>`).join('') || '<option value="">— none —</option>'}</select>
       </div>
       <div id="cal-guest-field" style="${trainerType==='guest'?'':'display:none;'}">
         <label class="field-label">Guest trainer name</label>
@@ -1032,7 +1036,8 @@ function calendarSessionForm(b, existing){
       </div>
     </div>
     ${sylBlock}
-    <div><label class="field-label">Topic</label><input class="field-input" name="topic" required placeholder="e.g. Customer research and ICP mapping" value="${esc(topicValue)}"></div>`;
+    <div><label class="field-label">Topic</label><input class="field-input" name="topic" required placeholder="e.g. Customer research and ICP mapping" value="${esc(topicValue)}"></div>
+    ${academicSessionProgressFields(existing || {})}`;
 }
 function toggleCalTrainerFields(v){
   const staffEl = document.getElementById('cal-staff-field');
@@ -1042,6 +1047,7 @@ function toggleCalTrainerFields(v){
 }
 function openAddCalendarSession(batchId, insertAt){
   const b = batchById(batchId);
+  if(!b || !canManageAcademicPlanner()) return;
   showModal(`
     <div class="modal-head"><h3>Add academic calendar day</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-add-cal-session"><div class="modal-body">${calendarSessionForm(b, null)}</div>
@@ -1049,17 +1055,19 @@ function openAddCalendarSession(batchId, insertAt){
     </form>`);
   document.getElementById("f-add-cal-session").addEventListener("submit", e=>{
     e.preventDefault();
+    if(!canManageAcademicPlanner()) return;
     const f = new FormData(e.target);
     const trainerType = f.get("trainerType");
-    const session = {id:nextCalSessionId(), date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic"), syllabusRef:f.get("syllabusRef")||""};
+    const session = {id:nextCalSessionId(), date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic"), syllabusRef:f.get("syllabusRef")||"", ...academicSessionProgress(f)};
     const cal = ensureBatchCalendar(b);
     if(insertAt==null || insertAt<0 || insertAt>cal.length) cal.push(session);
     else cal.splice(insertAt, 0, session);
-    toast("Academic calendar day added"); closeModal(); openBatchDetail(batchId);
+    toast("Academic calendar day added"); closeModal(); refreshAcademicCalendar(batchId);
   });
 }
 function openEditCalendarSession(batchId, sessionId){
   const b = batchById(batchId);
+  if(!b || !canManageAcademicPlanner()) return;
   const s = calendarOf(b).find(x=>x.id===sessionId);
   if(!s) return;
   showModal(`
@@ -1069,18 +1077,20 @@ function openEditCalendarSession(batchId, sessionId){
     </form>`);
   document.getElementById("f-edit-cal-session").addEventListener("submit", e=>{
     e.preventDefault();
+    if(!canManageAcademicPlanner()) return;
     const f = new FormData(e.target);
     const trainerType = f.get("trainerType");
-    Object.assign(s, {date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic"), syllabusRef:f.get("syllabusRef")||""});
-    toast("Day updated"); closeModal(); openBatchDetail(batchId);
+    Object.assign(s, {date:f.get("date"), trainerType, trainerName: trainerType==='guest' ? (f.get("guestName")||"").trim() : f.get("staffTrainer"), topic:f.get("topic"), syllabusRef:f.has("syllabusRef") ? (f.get("syllabusRef")||"") : (s.syllabusRef||""), ...academicSessionProgress(f)});
+    toast("Day updated"); closeModal(); refreshAcademicCalendar(batchId);
   });
 }
 function removeCalendarSession(batchId, sessionId){
   const b = batchById(batchId);
+  if(!b || !canManageAcademicPlanner()) return;
   const cal = ensureBatchCalendar(b);
   const idx = cal.findIndex(x=>x.id===sessionId);
   if(idx>-1) cal.splice(idx,1);
-  toast("Day removed"); openBatchDetail(batchId);
+  toast("Day removed"); refreshAcademicCalendar(batchId);
 }
 /* ===================== TRAINER SESSION LOGS ===================== */
 // Every trainer with a class on the academic calendar (see openAddCalendarSession()) is expected to
@@ -2009,6 +2019,7 @@ const MODULES = [
     {id:"all", label:"Students", icon:"i-briefcase"},
     {id:"courses", label:"Courses", icon:"i-board"},
     {id:"batches", label:"Batches", icon:"i-calendar"},
+    {id:"planner", label:"Academic Planner", icon:"i-calendar"},
     {id:"materials", label:"Materials", icon:"i-paperclip"},
     {id:"assignments", label:"Assignments", icon:"i-target"},
     {id:"complaints", label:"Complaints", icon:"i-megaphone", count:()=>studentComplaints.filter(c=>c.status==="New").length},
@@ -2105,8 +2116,8 @@ function visibleModules(){
   }
   return MODULES;
 }
-function setModule(id){ if(!visibleModules().some(m=>m.id===id)) return; nav.module=id; nav.detail=null; render(); }
-function setSub(mid, sid){ const mods=visibleModules(); const mod=mods.find(m=>m.id===mid); if(!mod) return; if(mod.sub && !mod.sub.some(s=>s.id===sid)) return; nav.module=mid; nav.sub[mid]=sid; nav.detail=null; render(); }
+function setModule(id){ if(!visibleModules().some(m=>m.id===id)) return; nav.module=id; nav.detail=null; render(); if(!MODULES.find(m=>m.id===id)?.sub && typeof closeMobileNavigation==='function') closeMobileNavigation(); }
+function setSub(mid, sid){ const mods=visibleModules(); const mod=mods.find(m=>m.id===mid); if(!mod) return; if(mod.sub && !mod.sub.some(s=>s.id===sid)) return; nav.module=mid; nav.sub[mid]=sid; nav.detail=null; render(); if(typeof closeMobileNavigation==='function') closeMobileNavigation(); }
 function closeDetail(){ nav.detail=null; render(); }
 
 function renderNav(){
@@ -2177,6 +2188,7 @@ const TOPBAR_TITLES = {
     all:["Students", ()=>students.length+" on record"],
     courses:["Courses", ()=>COURSES.length+" in the catalog"],
     batches:["Batches", ()=>batches.length+" started, all time"],
+    planner:["Academic Planner", "Programme, faculty progress and student engagement"],
     materials:["Materials", ()=>materials.length+" items"],
     assignments:["Assignments", ()=>assignments.length+" given"],
     complaints:["Complaints", ()=>studentComplaints.filter(c=>c.status==="New").length+" new"],
@@ -2230,7 +2242,7 @@ function render(){
   else if(nav.module==="workspace") root.innerHTML = ({overview:workspaceOverview,tasks:workspaceTasks,sessions:workspaceSessions,attendance:workspaceAttendance,leave:workspaceLeave,payroll:workspacePayroll,payments:workspacePaymentRequests,complaints:workspaceComplaints,commission:workspaceCommission,leaderboard:workspaceLeaderboard})[nav.sub.workspace]();
   else if(nav.module==="hr") root.innerHTML = ({overview:hrOverview,directory:hrDirectory,attendance:hrAttendance,leave:hrLeave,hiring:hrHiring,payroll:hrPayroll,advances:hrAdvances,withdrawals:hrWithdrawals,sessionlogs:hrSessionLogs,complaints:hrComplaints,notices:hrNotices,policies:hrPolicies})[nav.sub.hr]();
   else if(nav.module==="marketing") root.innerHTML = ({overview:mktOverview,content:mktContent,performance:mktPerformance})[nav.sub.marketing]();
-  else if(nav.module==="students") root.innerHTML = ({overview:studentsOverview,all:studentsAll,courses:admissionsCourses,batches:admissionsBatches,materials:admissionsMaterials,assignments:admissionsAssignments,complaints:admissionsComplaints})[nav.sub.students]();
+  else if(nav.module==="students") root.innerHTML = ({overview:studentsOverview,all:studentsAll,courses:admissionsCourses,batches:admissionsBatches,planner:academicPlanner,materials:admissionsMaterials,assignments:admissionsAssignments,complaints:admissionsComplaints})[nav.sub.students]();
   else if(nav.module==="accounts") root.innerHTML = ({overview:acctOverview,receipts:acctPaymentReceipts,requests:acctPaymentRequests,payroll:acctPayroll,payables:acctPayables,expenses:acctExpenses,banks:acctBanks,commissions:acctCommissions,coa:acctChartOfAccounts,journal:acctJournal,reports:acctReports})[nav.sub.accounts]();
   if(nav.module==="marketing" && nav.sub.marketing==="content") initContentBoard();
   if(nav.module==="workspace" && nav.sub.workspace==="tasks") renderMyTaskBoard();
@@ -5353,7 +5365,7 @@ function openBatchDetail(id){
       ${(b.schedule.installments||[]).length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Installment</th><th class="num">Amount</th><th>Due date</th></tr></thead><tbody>${b.schedule.installments.map(i=>`<tr><td>${esc(i.label)}</td><td class="num mono">${inr(i.amount!=null?i.amount:Math.round((courseSettingsOf(b.course).price||0)*(i.percent||0)/100))}</td><td class="muted">${fmtDate(i.dueDate)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">No installment schedule set for this batch yet.</div>`}
       <div class="section-label">Students (${st.length})</div>
       ${st.length?`<div class="table-wrap"><table class="data"><thead><tr><th>Student</th><th>Status</th></tr></thead><tbody>${st.map(s=>`<tr class="row-click" onclick="closeModal();openStudentDetail('${s.id}')"><td>${studentCell(s.id)}</td><td>${pill(s.status,studentStatusKind(s.status))}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">No students registered into this batch yet.</div>`}
-      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Academic Calendar<button class="btn btn-sm ghost" onclick="openAddCalendarSession('${b.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Add session</button></div>
+      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Academic Calendar<button class="btn btn-sm ghost" onclick="openAcademicPlanner('${b.id}')">Open planner</button><button class="btn btn-sm ghost" onclick="openAddCalendarSession('${b.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Add session</button></div>
       ${batchCalendarRowsHTML(b)}
       <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div style="display:flex;align-items:center;gap:8px;">Workflow<span class="faint" style="font-weight:600;font-size:11.5px;text-transform:none;letter-spacing:0;">work for this batch, assignable to any Demand School staff</span></div>
@@ -7576,7 +7588,7 @@ const STUDENT_NAV = [
   {id:"complaints", label:"Complaints", icon:"i-megaphone", count:()=>currentStudent?studentComplaintsOf(currentStudent.id).filter(c=>c.status!=='Resolved').length:0},
 ];
 let studentTab = 'overview';
-function setStudentTab(id){ studentTab = id; renderStudentPortal(); }
+function setStudentTab(id){ studentTab = id; renderStudentPortal(); if(typeof closeMobileNavigation==='function') closeMobileNavigation(); }
 let studentPortalAttendanceFilter = "All";
 function setStudentPortalAttendanceFilter(v){ studentPortalAttendanceFilter = v; renderStudentPortal(); }
 function renderStudentNav(){
@@ -7784,5 +7796,6 @@ function openRaiseStudentComplaint(){
 // Resume an existing session (cookie still valid) instead of asking for the password again.
 api('me').then(res=>bootSession(res.user, res.writable, res.readable)).catch(()=>{ /* not signed in: the login screen stays up */ });
 </script>
+<script src="/mobile.js"></script>
 
 </body></html>
