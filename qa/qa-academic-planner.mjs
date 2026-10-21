@@ -52,7 +52,7 @@ try{
     return page;
   }
   const page=await login('coordinator@example.test');
-  assert.deepEqual(await page.evaluate(()=>visibleModules().map(m=>m.id)),['workspace','students']);
+  assert.deepEqual(await page.evaluate(()=>visibleModules().map(m=>m.id)),['workspace','students','placements']);
   await page.evaluate(()=>setSub('students','planner'));
   assert.equal(await page.getByText('No days planned yet.',{exact:false}).count(),1);
   assert.equal(await page.getByRole('button',{name:/template/i}).count(),0);
