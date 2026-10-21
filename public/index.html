@@ -300,6 +300,14 @@
   .calc-line{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px;}
   .calc-line.total{border-bottom:none;border-top:1px solid var(--line);margin-top:4px;padding-top:10px;font-weight:800;font-size:14.5px;}
 
+  .review-shell{position:fixed;inset:0;z-index:900;overflow:auto;background:var(--paper);display:flex;justify-content:center;align-items:flex-start;padding:32px 16px;}
+  .review-shell[hidden]{display:none;}
+  .review-card{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:28px;display:flex;flex-direction:column;gap:18px;}
+  .review-brand{font-weight:800;letter-spacing:.14em;font-size:11px;color:var(--brand-strong);}
+  .review-card h2{margin:0;font-size:20px;line-height:1.3;}
+  .review-stars{display:flex;gap:6px;margin-top:6px;}
+  .review-star{font-size:34px;line-height:1;background:none;border:none;padding:2px;color:var(--line);cursor:pointer;}
+  .review-star.on{color:var(--warn);}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--solid);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:var(--shadow-lg);z-index:60;display:flex;align-items:center;gap:8px;}
   .toast .icon{color:#fff;}
 
@@ -470,7 +478,9 @@
 </div>
 <div id="toast-root"></div>
 
+<div class="review-shell" id="review-shell" hidden></div>
 <script src="/academic-planner.js"></script>
+<script src="/placements.js"></script>
 <script src="/academic-pdf.js"></script>
 <script>
 /* =============================================================================
@@ -537,6 +547,7 @@ function renameCourse(oldName, newName){
   quotes.forEach(q=>{ (q.items||[]).forEach(it=>{ if(it.dept===oldName) it.dept=newName; }); });
   if(typeof marketingLeads!=='undefined') marketingLeads.forEach(l=>{ if(l.courseInterested===oldName) l.courseInterested=newName; });
   employees.forEach(e=>{ if(e.course===oldName) e.course=newName; });
+  placementPartners.forEach(p=>(p.positions||[]).forEach(x=>{ if(x.course===oldName) x.course=newName; }));
   if(nav.detail && nav.detail.type==='course' && nav.detail.id===oldName) nav.detail.id = newName;
 }
 
@@ -614,13 +625,15 @@ function monthlyAttendanceCounts(empId, month){
   const [y,m] = month.split("-").map(Number);
   const isCurrent = month===TODAY.slice(0,7);
   const lastDay = isCurrent ? Number(TODAY.slice(8,10)) : daysInCalendarMonth(y,m);
-  let leave=0, wfh=0;
+  let leave=0, wfh=0, absent=0, half=0;
   for(let d=1; d<=lastDay; d++){
     const status = dayAttendanceStatus(empId, `${month}-${String(d).padStart(2,'0')}`);
-    if(status==="leave") leave++;
+    if(status==="absent") absent++;
+    else if(status==="half") half++;
+    else if(status==="leave") leave++;
     else if(status==="wfh") wfh++;
   }
-  return {leave, wfh};
+  return {leave, wfh, absent, half};
 }
 // Projects the payroll impact of a leave request BEFORE it's even submitted — splits the requested
 // date range by calendar month (a request can straddle month-end) and, for each month touched, adds
@@ -717,7 +730,8 @@ function calendarEventsForMonth(monthStr){
 // leave is tracked purely on a monthly basis, there is no separate annual entitlement bank.
 function lopDaysFor(empId, month){
   const counts = monthlyAttendanceCounts(empId, month);
-  return Math.max(0, counts.leave - hrPolicy.paidLeavesPerMonth);
+  // Unapproved absence is a full LOP day and a half day is half a LOP day; neither uses up the paid-leave allowance.
+  return Math.max(0, counts.leave - hrPolicy.paidLeavesPerMonth) + counts.absent + counts.half*0.5;
 }
 // WFH days beyond the monthly paid-WFH allowance: paid at 75% (a 25% cut) rather than a full LOP.
 function wfhExcessDaysFor(empId, month){
@@ -732,6 +746,9 @@ let leaveRequests = [];
 // of payroll for an advance, so all that needs to be visible afterward is how much of it got paid.
 let advances = [];
 function advancePaid(a){ return (a.payments||[]).reduce((s,p)=>s+p.amount,0); }
+function advancePaidInMonth(empId, month){
+  return advances.filter(a=>a.empId===empId && a.status==="Approved").reduce((s,a)=>s+(a.payments||[]).filter(p=>p.date && p.date.slice(0,7)===month).reduce((t,p)=>t+p.amount,0),0);
+}
 function advanceBalance(a){ return Math.max(0, a.amount - advancePaid(a)); }
 function advancePayStatus(a){
   if(a.status==="Pending") return "Pending";
@@ -818,12 +835,14 @@ function computePayrollRow(emp, month){
   const lopDeduction = Math.round(perDayRate * lopDays);
   const wfhExcessDays = wfhExcessDaysFor(emp.id, month);
   const wfhDeduction = Math.round(perDayRate * 0.25 * wfhExcessDays);
-  const totalDeductions = lopDeduction+wfhDeduction;
+  // Advance salary paid out during this month is part of this month's pay already handed over, so it comes off the net.
+  const advanceRecovery = Math.min(advancePaidInMonth(emp.id, month), Math.max(0, gross-lopDeduction-wfhDeduction));
+  const totalDeductions = lopDeduction+wfhDeduction+advanceRecovery;
   const net = gross-totalDeductions;
   const paid = (rec.payments||[]).reduce((s,p)=>s+p.amount,0);
   const balance = Math.max(0, net-paid);
   const payStatus = paid<=0 ? "Unpaid" : balance>0 ? "Partially Paid" : "Paid";
-  return {basic,hra,special,gross,lopDays,lopDeduction,wfhExcessDays,wfhDeduction,monthWorkingDays,totalDeductions,net,paid,balance,payStatus};
+  return {basic,hra,special,gross,advanceRecovery,lopDays,lopDeduction,wfhExcessDays,wfhDeduction,monthWorkingDays,totalDeductions,net,paid,balance,payStatus};
 }
 // Small "incl. Xd LOP / Yd WFH@75%" subtext shown under a payroll row's Deductions figure — shared by
 // hrPayroll() and acctPayroll() so both stay in sync.
@@ -831,12 +850,13 @@ function payrollDeductionSubtext(calc){
   const parts = [];
   if(calc.lopDeduction>0) parts.push(`${calc.lopDays}d LOP`);
   if(calc.wfhDeduction>0) parts.push(`${calc.wfhExcessDays}d WFH @75%`);
+  if(calc.advanceRecovery>0) parts.push('advance '+inr(calc.advanceRecovery));
   return parts.length ? `<div class="subtext" style="color:var(--neg);text-align:right;">incl. ${parts.join(', ')}</div>` : "";
 }
 function payrollMonthStatus(month){
   const ids = Object.keys(payroll.history[month].entries);
   if(!ids.length) return "Adding entries";
-  if(ids.length < employees.length) return "Adding entries";
+  if(activeEmployees().some(e=>!ids.includes(e.id))) return "Adding entries";
   const allSettled = ids.every(id=>computePayrollRow(byId(id),month).balance===0);
   return allSettled ? "Paid" : "Payments pending";
 }
@@ -2024,6 +2044,13 @@ const MODULES = [
     {id:"assignments", label:"Assignments", icon:"i-target"},
     {id:"complaints", label:"Complaints", icon:"i-megaphone", count:()=>studentComplaints.filter(c=>c.status==="New").length},
   ]},
+  {id:"placements", label:"Placements", icon:"i-handshake", sub:[
+    {id:"overview", label:"Overview", icon:"i-trend"},
+    {id:"partners", label:"Partners", icon:"i-building"},
+    {id:"positions", label:"Open Positions", icon:"i-target"},
+    {id:"students", label:"Students", icon:"i-users", count:()=>pendingPlacementPool().length},
+    {id:"reviews", label:"Reviews", icon:"i-check"},
+  ]},
   {id:"accounts", label:"Accounts", icon:"i-wallet", sub:[
     {id:"overview", label:"Overview", icon:"i-trend"},
     {id:"receipts", label:"Payment Receipts", icon:"i-check", count:()=>pendingSalesPayments().length},
@@ -2038,7 +2065,7 @@ const MODULES = [
     {id:"reports", label:"Reports", icon:"i-file"},
   ]},
 ];
-let nav = {module:"dashboard", sub:{workspace:"overview", hr:"overview", marketing:"overview", students:"overview", accounts:"overview"}, detail:null};
+let nav = {module:"dashboard", sub:{workspace:"overview", hr:"overview", marketing:"overview", students:"overview", placements:"overview", accounts:"overview"}, detail:null};
 
 // An "HR Executive" (role containing "HR") only manages HR — hiring, attendance, leave, payroll,
 // advances, complaints, policies — so their sidebar shows nothing else. Their payroll work already
@@ -2087,7 +2114,13 @@ const SALES_WORKSPACE_SUB = [
   {id:"commission", label:"My Commission", icon:"i-percent", count:()=>currentUser?payables.filter(p=>p.category==="Commission" && p.salesPerson===currentUser.name && payableBalance(p)>0).length:0},
   {id:"leaderboard", label:"Leaderboard", icon:"i-target"},
 ];
+// Academics staff and anyone with a placements role also get the Placements module, whatever their other access.
 function visibleModules(){
+  const mods = visibleModulesBase();
+  if(currentUser && !mods.some(m=>m.id==='placements') && hasPlacementsAccess(currentUser)) return [...mods, MODULES.find(m=>m.id==='placements')];
+  return mods;
+}
+function visibleModulesBase(){
   if(currentUser && accessOf(currentUser)==='custom'){
     const m = currentUser.modules, ids = ['workspace'];
     if(m.includes('hr')) ids.push('hr');
@@ -2193,6 +2226,13 @@ const TOPBAR_TITLES = {
     assignments:["Assignments", ()=>assignments.length+" given"],
     complaints:["Complaints", ()=>studentComplaints.filter(c=>c.status==="New").length+" new"],
   },
+  placements: {
+    overview:["Placements Overview", ()=>pendingPlacementPool().length+" awaiting placement · "+placements.filter(x=>x.status==="Placed").length+" interning"],
+    partners:["Placement Partners", ()=>placementPartners.length+" in the database"],
+    positions:["Open Positions","Roles partners are hiring interns for"],
+    students:["Students in Placement", ()=>placements.length+" registered, all time"],
+    reviews:["Placement Reviews","Students on partners, and partners on students"],
+  },
   accounts: {
     overview:["Accounts Overview", ()=>"Course profitability, net of sales commission · "+MONTH_LABEL[payroll.selectedMonth]],
     receipts:["Payment Receipts", ()=>pendingSalesPayments().length+" awaiting confirmation"],
@@ -2224,6 +2264,10 @@ function renderDetailTopbar(){
     const c = studentById(nav.detail.id);
     document.getElementById("topbar-title").innerHTML = `<h2>${esc(c.name)}</h2><span>${[esc(c.course), c.city?esc(c.city):null].filter(Boolean).join(' · ')}</span>`;
   }
+  if(nav.detail.type==='partner'){
+    const p = partnerById(nav.detail.id);
+    document.getElementById("topbar-title").innerHTML = p ? `<h2>${esc(p.name)}</h2><span>${[esc(p.type), p.city?esc(p.city):null].filter(Boolean).join(' · ')}</span>` : `<h2>Partner</h2>`;
+  }
   if(nav.detail.type==='course'){
     const name = nav.detail.id;
     document.getElementById("topbar-title").innerHTML = `<h2>${esc(name)}</h2><span>${esc(courseSettingsOf(name).duration||'—')} · ${inr(courseSettingsOf(name).price)}</span>`;
@@ -2236,6 +2280,7 @@ function render(){
     renderDetailTopbar();
     if(nav.detail.type==='student'){ root.innerHTML = studentDetailPage(nav.detail.id); renderStudentTaskBoard(nav.detail.id); return; }
     if(nav.detail.type==='course'){ root.innerHTML = courseDetailPage(nav.detail.id); return; }
+    if(nav.detail.type==='partner'){ root.innerHTML = partnerDetailPage(nav.detail.id); return; }
   }
   renderTopbar();
   if(nav.module==="dashboard") root.innerHTML = viewDashboard();
@@ -2243,6 +2288,7 @@ function render(){
   else if(nav.module==="hr") root.innerHTML = ({overview:hrOverview,directory:hrDirectory,attendance:hrAttendance,leave:hrLeave,hiring:hrHiring,payroll:hrPayroll,advances:hrAdvances,withdrawals:hrWithdrawals,sessionlogs:hrSessionLogs,complaints:hrComplaints,notices:hrNotices,policies:hrPolicies})[nav.sub.hr]();
   else if(nav.module==="marketing") root.innerHTML = ({overview:mktOverview,content:mktContent,performance:mktPerformance})[nav.sub.marketing]();
   else if(nav.module==="students") root.innerHTML = ({overview:studentsOverview,all:studentsAll,courses:admissionsCourses,batches:admissionsBatches,planner:academicPlanner,materials:admissionsMaterials,assignments:admissionsAssignments,complaints:admissionsComplaints})[nav.sub.students]();
+  else if(nav.module==="placements") root.innerHTML = ({overview:placementsOverview,partners:placementsPartners,positions:placementsPositions,students:placementsStudents,reviews:placementsReviews})[nav.sub.placements]();
   else if(nav.module==="accounts") root.innerHTML = ({overview:acctOverview,receipts:acctPaymentReceipts,requests:acctPaymentRequests,payroll:acctPayroll,payables:acctPayables,expenses:acctExpenses,banks:acctBanks,commissions:acctCommissions,coa:acctChartOfAccounts,journal:acctJournal,reports:acctReports})[nav.sub.accounts]();
   if(nav.module==="marketing" && nav.sub.marketing==="content") initContentBoard();
   if(nav.module==="workspace" && nav.sub.workspace==="tasks") renderMyTaskBoard();
@@ -3199,7 +3245,7 @@ function hrPayroll(){
   const month = payroll.selectedMonth;
   const includedIds = Object.keys(payroll.history[month].entries);
   const includedEmployees = employees.filter(e=>includedIds.includes(e.id)).sort((a,b)=>a.name.localeCompare(b.name));
-  const pendingEmployees = employees.filter(e=>!includedIds.includes(e.id));
+  const pendingEmployees = activeEmployees().filter(e=>!includedIds.includes(e.id));
   const rows = includedEmployees.map(e=>({emp:e, calc:computePayrollRow(e,month)}));
   const totals = rows.reduce((s,r)=>({gross:s.gross+r.calc.gross, ded:s.ded+r.calc.totalDeductions, net:s.net+r.calc.net, paid:s.paid+r.calc.paid, balance:s.balance+r.calc.balance}),{gross:0,ded:0,net:0,paid:0,balance:0});
   const status = payrollMonthStatus(month);
@@ -3211,7 +3257,7 @@ function hrPayroll(){
   <div class="toolbar">
     <select class="select-sm" onchange="setPayrollMonth(this.value)">${Object.keys(payroll.history).sort().reverse().map(m=>`<option value="${m}" ${m===month?'selected':''}>${MONTH_LABEL[m]}</option>`).join("")}</select>
     <div style="display:flex;align-items:center;gap:10px;">
-      <span class="faint" style="font-size:12px;">${includedEmployees.length} of ${employees.length} added</span>
+      <span class="faint" style="font-size:12px;">${includedEmployees.length} of ${activeEmployees().length} added</span>
       ${pill(status,statusKind(status))}
     </div>
   </div>
@@ -3257,7 +3303,7 @@ function acctPayroll(){
   const month = payroll.selectedMonth;
   const includedIds = Object.keys(payroll.history[month].entries);
   const includedEmployees = employees.filter(e=>includedIds.includes(e.id)).sort((a,b)=>a.name.localeCompare(b.name));
-  const pendingEmployees = employees.filter(e=>!includedIds.includes(e.id));
+  const pendingEmployees = activeEmployees().filter(e=>!includedIds.includes(e.id));
   const rows = includedEmployees.map(e=>({emp:e, calc:computePayrollRow(e,month)}));
   const totals = rows.reduce((s,r)=>({gross:s.gross+r.calc.gross, ded:s.ded+r.calc.totalDeductions, net:s.net+r.calc.net, paid:s.paid+r.calc.paid, balance:s.balance+r.calc.balance}),{gross:0,ded:0,net:0,paid:0,balance:0});
   const status = payrollMonthStatus(month);
@@ -3265,7 +3311,7 @@ function acctPayroll(){
   <div class="toolbar">
     <select class="select-sm" onchange="setPayrollMonth(this.value)">${Object.keys(payroll.history).sort().reverse().map(m=>`<option value="${m}" ${m===month?'selected':''}>${MONTH_LABEL[m]}</option>`).join("")}</select>
     <div style="display:flex;align-items:center;gap:10px;">
-      <span class="faint" style="font-size:12px;">${includedEmployees.length} of ${employees.length} added</span>
+      <span class="faint" style="font-size:12px;">${includedEmployees.length} of ${activeEmployees().length} added</span>
       ${pill(status,statusKind(status))}
     </div>
   </div>
@@ -4066,7 +4112,8 @@ function openPayslip(id, readOnly){
       <div class="calc-line"><span>Special allowance</span><span class="mono">${inr(c.special)}</span></div>
       <div class="calc-line total"><span>Gross pay</span><span class="mono">${inr(c.gross)}</span></div>
       <div class="section-label">Deductions</div>
-      ${c.lopDeduction>0?`<div class="calc-line"><span>Loss of Pay (${c.lopDays} day${c.lopDays===1?"":"s"} beyond ${hrPolicy.paidLeavesPerMonth}/month · ${MONTH_LABEL[month]} has ${c.monthWorkingDays} working days)</span><span class="mono" style="color:var(--neg);">−${inr(c.lopDeduction)}</span></div>`:""}
+      ${c.lopDeduction>0?`<div class="calc-line"><span>Loss of Pay (${c.lopDays} day${c.lopDays===1?"":"s"} — leave beyond ${hrPolicy.paidLeavesPerMonth}/month, absences and half days · ${MONTH_LABEL[month]} has ${c.monthWorkingDays} working days)</span><span class="mono" style="color:var(--neg);">−${inr(c.lopDeduction)}</span></div>`:""}
+      ${c.advanceRecovery>0?`<div class="calc-line"><span>Advance salary already paid this month</span><span class="mono" style="color:var(--neg);">−${inr(c.advanceRecovery)}</span></div>`:""}
       ${c.wfhDeduction>0?`<div class="calc-line"><span>WFH beyond ${hrPolicy.paidWfhPerMonth}/month (${c.wfhExcessDays} day${c.wfhExcessDays===1?"":"s"} · paid at 75%)</span><span class="mono" style="color:var(--neg);">−${inr(c.wfhDeduction)}</span></div>`:""}
       <div class="calc-line total"><span>Net pay</span><span class="mono">${inr(c.net)}</span></div>
       <div class="section-label">Payments</div>
@@ -4100,6 +4147,7 @@ function decideAdvance(id,decision){ advances.find(x=>x.id===id).status=decision
 function openAddPayrollEntry(id){
   const e = byId(id); const month = payroll.selectedMonth;
   const existing = payroll.history[month].entries[id];
+  if(existing && computePayrollRow(e, month).payStatus==="Paid"){ toast("This payroll entry is fully paid and locked"); return; }
   const guest = isGuestTrainer(e);
   const guestHours = guest ? approvedHoursFor(id, month) : 0;
   const startGross = existing ? existing.gross : (guest ? guestTrainerMonthEarnings(e, month) : e.salary);
@@ -4381,7 +4429,7 @@ function studentDetailPage(id){
   const mySubs = submissionsOfStudent(c.id).map(s=>({...s, a: assignments.find(a=>a.id===s.assignmentId)})).filter(x=>x.a).sort((x,y)=>y.a.dueDate.localeCompare(x.a.dueDate));
   const score = studentOverallScore(c.id);
   return `
-    <div class="toolbar"><button class="btn ghost" onclick="closeDetail()"><svg class="icon" style="width:13px;height:13px"><use href="#i-chevron-left"/></svg>Back</button><button class="btn primary" onclick="openEditStudent('${c.id}')"><svg class="icon" style="width:13px;height:13px"><use href="#i-edit"/></svg>Edit student</button></div>
+    <div class="toolbar"><button class="btn ghost" onclick="closeDetail()"><svg class="icon" style="width:13px;height:13px"><use href="#i-chevron-left"/></svg>Back</button><div style="display:flex;gap:8px;flex-wrap:wrap;">${canUsePlacements()?studentPlacementButtonHTML(c):''}<button class="btn primary" onclick="openEditStudent('${c.id}')"><svg class="icon" style="width:13px;height:13px"><use href="#i-edit"/></svg>Edit student</button></div></div>
     <div class="panel">
       <div class="panel-head"><h3>${esc(c.name)}</h3><div class="sub">${[esc(c.course), batch?esc(batch.label):null, c.city?esc(c.city):null].filter(Boolean).join(' · ')}</div></div>
       <div class="modal-body">
@@ -4847,8 +4895,8 @@ function admissionsCourses(){
   <div class="toolbar"><div></div><button class="btn primary" onclick="openAddCourse()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Add course</button></div>
   <div class="panel">
     <div class="panel-head"><h3>Courses</h3><div class="sub">${COURSES.length} course${COURSES.length===1?'':'s'} in the catalog</div></div>
-    <div class="table-wrap"><table class="data"><thead><tr><th>Course</th><th class="num">Price</th><th>Duration</th><th>Mode</th><th class="num">Running</th><th class="num">Total (all-time)</th><th class="num">Fee Pending</th><th class="num">Batches</th><th></th></tr></thead>
-      <tbody>${rows.map(r=>`<tr class="row-click" onclick="openCourseDetail(${jsq(r.name)})"><td style="font-weight:700;">${esc(r.name)}</td><td class="num mono">${inr(r.cs.price)}</td><td class="muted">${esc(r.cs.duration||'—')}</td><td class="muted">${esc(r.cs.mode||'—')}</td><td class="num mono">${r.running}</td><td class="num mono">${r.total}</td><td class="num mono" style="${r.pending>0?'color:var(--neg);font-weight:700;':''}">${r.pending>0?inr(r.pending):'—'}</td><td class="num mono">${r.batchCount}</td><td><button class="btn btn-sm ghost" onclick="event.stopPropagation();openCourseSettings(${jsq(r.name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></td></tr>`).join("")}</tbody>
+    <div class="table-wrap"><table class="data"><thead><tr><th>Course</th><th class="num">Price</th><th>Duration</th><th>Mode</th><th>Internship</th><th class="num">Running</th><th class="num">Total (all-time)</th><th class="num">Fee Pending</th><th class="num">Batches</th><th></th></tr></thead>
+      <tbody>${rows.map(r=>`<tr class="row-click" onclick="openCourseDetail(${jsq(r.name)})"><td style="font-weight:700;">${esc(r.name)}</td><td class="num mono">${inr(r.cs.price)}</td><td class="muted">${esc(r.cs.duration||'—')}</td><td class="muted">${esc(r.cs.mode||'—')}</td><td>${r.cs.internship?pill('Yes','pos'):'<span class="faint">—</span>'}</td><td class="num mono">${r.running}</td><td class="num mono">${r.total}</td><td class="num mono" style="${r.pending>0?'color:var(--neg);font-weight:700;':''}">${r.pending>0?inr(r.pending):'—'}</td><td class="num mono">${r.batchCount}</td><td><button class="btn btn-sm ghost" onclick="event.stopPropagation();openCourseSettings(${jsq(r.name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></td></tr>`).join("")}</tbody>
     </table></div>
   </div>`;
 }
@@ -4864,7 +4912,7 @@ function courseDetailPage(name){
   return `
     <div class="toolbar"><button class="btn ghost" onclick="closeDetail()"><svg class="icon" style="width:13px;height:13px"><use href="#i-chevron-left"/></svg>Back</button><button class="btn primary" onclick="openCourseSettings(${jsq(name)})"><svg class="icon" style="width:13px;height:13px"><use href="#i-sliders"/></svg>Course settings</button></div>
     <div class="panel">
-      <div class="panel-head"><h3>${esc(name)}</h3><div class="sub">${esc(cs.duration||'—')}${cs.mode?' · '+esc(cs.mode):''}</div></div>
+      <div class="panel-head"><h3>${esc(name)}</h3><div class="sub">${esc(cs.duration||'—')}${cs.mode?' · '+esc(cs.mode):''}${cs.internship?' · Internship track':''}</div></div>
       <div class="modal-body">
         <div class="kpi-grid">
           <div class="kpi-card"><div class="kpi-label">Price</div><div class="kpi-value mono" style="font-size:19px;">${inr(cs.price)}</div></div>
@@ -4911,6 +4959,7 @@ function openCourseSettings(name){
       </div>
       <div><label class="field-label">Mode</label>${modeSelectHTML(cs.mode)}</div>
       <div><label class="field-label">Description</label><textarea class="field-input" name="description" rows="3">${esc(cs.description||'')}</textarea></div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;"><input type="checkbox" name="internship" style="margin-top:3px;" ${cs.internship?'checked':''}> <span><b>Offers internship placement</b><br><span class="faint">Students of this course can be registered for placement at DesGro or partner companies.</span></span></label>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Save settings</button></div></div>
     </form>`);
@@ -4923,7 +4972,7 @@ function openCourseSettings(name){
       if(COURSES.includes(newName)){ toast("A course with that name already exists"); return; }
       renameCourse(name, newName);
     }
-    courseSettings[newName] = {price:Number(f.get("price"))||0, duration:f.get("duration"), mode:f.get("mode"), description:f.get("description")};
+    courseSettings[newName] = {...cs, price:Number(f.get("price"))||0, duration:f.get("duration"), mode:f.get("mode"), description:f.get("description"), internship:f.get("internship")==="on"};
     toast("Course settings saved"); closeModal(); render();
   });
 }
@@ -5222,6 +5271,7 @@ function openAddCourse(){
       </div>
       <div><label class="field-label">Mode</label>${modeSelectHTML()}</div>
       <div><label class="field-label">Description</label><textarea class="field-input" name="description" rows="3"></textarea></div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;"><input type="checkbox" name="internship" style="margin-top:3px;"> <span><b>Offers internship placement</b><br><span class="faint">Students can be registered for placement at DesGro or partner companies.</span></span></label>
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Add course</button></div></div>
     </form>`);
@@ -5232,7 +5282,7 @@ function openAddCourse(){
     if(!name) return;
     if(COURSES.includes(name)){ toast("That course already exists"); return; }
     COURSES.push(name);
-    courseSettings[name] = {price:Number(f.get("price"))||0, duration:f.get("duration"), mode:f.get("mode"), description:f.get("description")};
+    courseSettings[name] = {price:Number(f.get("price"))||0, duration:f.get("duration"), mode:f.get("mode"), description:f.get("description"), internship:f.get("internship")==="on"};
     toast("Course added"); closeModal(); render();
   });
 }
@@ -7224,7 +7274,8 @@ const SYNC_KEYS = {
   studentTasks:()=>studentTasks, contentItems:()=>contentItems, metaAdsCampaigns:()=>metaAdsCampaigns,
   marketingLeads:()=>marketingLeads, quotes:()=>quotes, invoices:()=>invoices, payables:()=>payables,
   commissionWithdrawals:()=>commissionWithdrawals, expenses:()=>expenses, bankAccounts:()=>bankAccounts,
-  bankTransactions:()=>bankTransactions, chartOfAccounts:()=>chartOfAccounts, journalEntries:()=>journalEntries
+  bankTransactions:()=>bankTransactions, chartOfAccounts:()=>chartOfAccounts, journalEntries:()=>journalEntries,
+  placementPartners:()=>placementPartners, placements:()=>placements
 };
 let syncEnabled = false, syncBusy = false, syncDirty = false, syncTimer = null;
 let syncWritable = [];
@@ -7532,7 +7583,7 @@ async function bootSession(user, writable, readable){
   applyCurrentUser(emp);
   // Land each sign-in on the right home screen — HR only ever sees the HR module, and Staff/Sales land
   // on their own personal workspace, so start there instead of the full company Dashboard.
-  nav.module = isHRRole(emp) ? 'hr' : (isLeadershipRole(emp) ? 'dashboard' : 'workspace');
+  nav.module = isHRRole(emp) ? 'hr' : (isLeadershipRole(emp) ? 'dashboard' : (isPlacementRole(emp) ? 'placements' : 'workspace'));
   {
     const landingMod = visibleModules().find(m=>m.id===nav.module);
     nav.sub[nav.module] = (landingMod && landingMod.sub && landingMod.sub.length) ? landingMod.sub[0].id : (nav.sub[nav.module] || 'overview');
@@ -7795,6 +7846,7 @@ function openRaiseStudentComplaint(){
 
 /* ===================== INIT ===================== */
 // Resume an existing session (cookie still valid) instead of asking for the password again.
+routeReviewLink();   // a #review=… link opens the public feedback form instead of the ERP
 api('me').then(res=>bootSession(res.user, res.writable, res.readable)).catch(()=>{ /* not signed in: the login screen stays up */ });
 </script>
 <script src="/mobile.js"></script>
