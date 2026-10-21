@@ -4873,7 +4873,7 @@ function courseDetailPage(name){
           <div class="kpi-card hero"><div class="kpi-label">Fee Pending</div><div class="kpi-value mono ${pending>0?'warn':''}" style="font-size:19px;">${inr(pending)}</div></div>
         </div>
         ${cs.description?`<div class="subtext" style="margin:2px 0 16px;">${esc(cs.description)}</div>`:''}
-        <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Syllabus<button class="btn btn-sm ghost" onclick="openEditSyllabus(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>${syllabusOf(name).length?'Edit syllabus':'Add syllabus'}</button></div>
+        <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Syllabus<span style="display:flex;gap:8px;"><button class="btn btn-sm ghost" onclick="openEditSyllabus(${jsq(name)},true)"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Upload PDF</button><button class="btn btn-sm ghost" onclick="openEditSyllabus(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>${syllabusOf(name).length?'Edit syllabus':'Add syllabus'}</button></span></div>
         ${syllabusListHTML(name,true)}
         <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Batches<button class="btn btn-sm ghost" onclick="openAddBatch(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Start new batch</button></div>
         ${bList.length?`<div class="table-wrap"><table class="data"><thead><tr><th>Batch</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Schedule</th><th class="num">Students</th><th></th></tr></thead>
@@ -5186,7 +5186,7 @@ function performDeleteSyllabusModule(name, idx){
   mods.splice(idx,1);
   saveSyllabusModules(name, mods, "Module deleted");
 }
-function openEditSyllabus(name){
+function openEditSyllabus(name, pickPdf){
   courseDraftSyllabus = syllabusOf(name).map(m=>({...m}));
   if(!courseDraftSyllabus.length) courseDraftSyllabus.push({week:"",label:"",title:"",duration:"",topics:""});
   showModal(`
@@ -5195,7 +5195,7 @@ function openEditSyllabus(name){
       <div class="subtext">Break the course into modules, in the order students will go through them. Students see this exact list — title, duration and topics — on their own portal. This is separate from a batch's dated Academic Calendar.</div>
       <div class="panel" style="box-shadow:none;"><div class="panel-body" style="display:flex;flex-direction:column;gap:6px;">
         <label class="field-label">Import from PDF <span class="faint">(optional)</span></label>
-        <input class="field-input" type="file" accept="application/pdf,.pdf" onchange="importSyllabusPdf(this)">
+        <input id="syllabus-pdf-file" class="field-input" type="file" accept="application/pdf,.pdf" onchange="importSyllabusPdf(this)">
         <div class="subtext" id="syllabus-pdf-status">Upload a syllabus PDF and the modules, durations and topics are filled in for you. No PDF? Just type the modules below.</div>
       </div></div>
       <div id="syllabus-rows" style="display:flex;flex-direction:column;gap:10px;">${syllabusDraftRowsHTML()}</div>
@@ -5203,6 +5203,7 @@ function openEditSyllabus(name){
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Save syllabus</button></div></div>
     </form>`, true);
+  if(pickPdf) document.getElementById("syllabus-pdf-file").click();
   document.getElementById("f-edit-syllabus").addEventListener("submit", e=>{
     e.preventDefault();
     const rows = readCourseDraftSyllabusFromDOM().filter(m=>m.title && m.title.trim());
