@@ -1298,6 +1298,7 @@ const CONTENT_TEAM = ['Amina Farook','Rishab K','Jithin Das','Risvan'];
 let contentItems = [];
 let contentNextId = 100;
 let contentPlatformFilter = 'All';
+let contentDateFilter = 'All';   // All | Today | Week | Month — matched against each item's due (or publish) date
 
 // Demand School's own Meta (Facebook/Instagram) ad campaigns — lead gen for course enrollment across
 // MMA, OCC, WPB and AIVE. Not student ad accounts — Demand School runs no ad accounts for anyone else.
@@ -4272,7 +4273,7 @@ function mktContent(){
   </div>
   <div class="toolbar">
     <div class="filter-group"><span class="filter-label">Platform</span><div id="platform-chips"></div></div>
-    <div class="filter-group"><select class="select-sm" id="assignee-filter" onchange="renderBoard()"></select><button class="btn primary" onclick="openContentModal()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>New Content</button></div>
+    <div class="filter-group"><span class="filter-label">Due</span><select class="select-sm" id="date-filter" onchange="setContentDateFilter(this.value)">${[['All','All dates'],['Today','Today'],['Week','This week'],['Month','This month']].map(o=>`<option value="${o[0]}" ${o[0]===contentDateFilter?'selected':''}>${o[1]}</option>`).join('')}</select><select class="select-sm" id="assignee-filter" onchange="renderBoard()"></select><button class="btn primary" onclick="openContentModal()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>New Content</button></div>
   </div>
   <div class="board-scroll"><div class="board" id="board"></div></div>
   `;
@@ -4286,11 +4287,24 @@ function initContentBoard(){
   renderBoard();
 }
 function setPlatformFilter(k){ contentPlatformFilter = k; initContentBoard(); }
+function setContentDateFilter(v){ contentDateFilter = v; renderBoard(); }
+// Items without a date are hidden while a date filter is on. "This week" runs Monday to Sunday around today.
+function contentMatchesDate(item){
+  if(contentDateFilter==='All') return true;
+  if(!item.due) return false;
+  if(contentDateFilter==='Today') return item.due===TODAY;
+  if(contentDateFilter==='Month') return item.due.slice(0,7)===TODAY.slice(0,7);
+  const d = new Date(TODAY+'T00:00:00'), back = (d.getDay()+6)%7;
+  const iso = x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");
+  d.setDate(d.getDate()-back); const start = iso(d);
+  d.setDate(d.getDate()+6);   const end = iso(d);
+  return item.due>=start && item.due<=end;
+}
 function isContentOverdue(item){ return item.stage!=='Published' && item.due && item.due < TODAY; }
 function platformIcon(name){ const p = PLATFORMS.find(x=>x.key===name); return p ? p.icon : 'i-globe'; }
 function contentCardHTML(item){
   const filterOk = (contentPlatformFilter==='All' || item.platforms.includes(contentPlatformFilter));
-  if(!filterOk) return '';
+  if(!filterOk || !contentMatchesDate(item)) return '';
   const assigneeFilter = document.getElementById('assignee-filter').value;
   if(assigneeFilter && assigneeFilter!=='All'){
     if(assigneeFilter==='Unassigned' && item.assignee) return '';
