@@ -799,6 +799,13 @@ let quotesMonthFilter = "All";
 function setQuotesMonthFilter(v){ quotesMonthFilter = v; render(); }
 let studentsMonthFilter = "All";
 function setStudentsMonthFilter(v){ studentsMonthFilter = v; render(); }
+// Students list filters: free-text search plus Course / Batch / Status / Fee due, combined with the Enrolled month.
+const studentsFilters = {q:"", course:"All", batch:"All", status:"All", fee:"All"};
+function setStudentsFilter(key, v){
+  studentsFilters[key] = v; render();
+  if(key==='q'){ const el = document.getElementById('students-search'); if(el){ el.focus(); el.setSelectionRange(v.length, v.length); } }   // render() rebuilds the input
+}
+function clearStudentsFilters(){ Object.assign(studentsFilters, {q:"", course:"All", batch:"All", status:"All", fee:"All"}); studentsMonthFilter = "All"; render(); }
 let invoicesMonthFilter = "All";
 function setInvoicesMonthFilter(v){ invoicesMonthFilter = v; render(); }
 // Accounts-side "Today / month-wise / All time" filters — one per dated list under the Accounts
@@ -4417,14 +4424,32 @@ function visibleStudents(){
 function studentsAll(){
   const myStudents = visibleStudents();
   const isSalesViewer = !!(currentUser && isSalesRole(currentUser));
-  const filtered = myStudents.filter(c=>studentsMonthFilter==='All' || c.onboarded.slice(0,7)===studentsMonthFilter);
+  const F = studentsFilters, q = F.q.trim().toLowerCase();
   const hidePayment = isStaffRole(currentUser);
+  const filtered = myStudents.filter(c=>
+    (studentsMonthFilter==='All' || c.onboarded.slice(0,7)===studentsMonthFilter)
+    && (F.course==='All' || c.course===F.course)
+    && (F.batch==='All' || batchLabelFor(c)===F.batch)
+    && (F.status==='All' || c.status===F.status)
+    && (hidePayment || F.fee==='All' || (F.fee==='due' ? studentPaymentDue(c.id)>0 : studentPaymentDue(c.id)<=0))
+    && (!q || [c.name, c.course, c.counsellor, c.place, c.phone, c.email].some(v=>String(v||'').toLowerCase().includes(q))));
+  const opts = (vals, cur) => ['All',...[...new Set(vals.filter(Boolean))].sort()].map(v=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${v==='All'?'All':esc(v)}</option>`).join('');
+  const filterActive = studentsMonthFilter!=='All' || q || ['course','batch','status','fee'].some(k=>F[k]!=='All');
+  const sel = (label, key, optionsHtml) => `<div class="filter-group"><span class="filter-label">${label}</span><select class="select-sm" onchange="setStudentsFilter('${key}',this.value)">${optionsHtml}</select></div>`;
   return `
-  <div class="toolbar"><div class="filter-group"><span class="filter-label">Enrolled</span><select class="select-sm" onchange="setStudentsMonthFilter(this.value)">${monthFilterOptions(myStudents.map(c=>c.onboarded), studentsMonthFilter)}</select></div><button class="btn primary" onclick="openAddStudent()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Register student</button></div>
+  <div class="toolbar" style="flex-wrap:wrap;gap:10px;"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <input id="students-search" class="select-sm" style="min-width:200px;" type="search" placeholder="Search name, course, counsellor…" value="${esc(F.q)}" oninput="setStudentsFilter('q',this.value)">
+    <div class="filter-group"><span class="filter-label">Enrolled</span><select class="select-sm" onchange="setStudentsMonthFilter(this.value)">${monthFilterOptions(myStudents.map(c=>c.onboarded), studentsMonthFilter)}</select></div>
+    ${sel('Course','course',opts(myStudents.map(c=>c.course),F.course))}
+    ${sel('Batch','batch',opts(myStudents.map(batchLabelFor),F.batch))}
+    ${sel('Status','status',['All','Active','Paused','Completed','Dropped'].map(v=>`<option ${v===F.status?'selected':''}>${v}</option>`).join(''))}
+    ${hidePayment?'':sel('Fees','fee',[['All','All'],['due','Fee due'],['clear','No dues']].map(([v,l])=>`<option value="${v}" ${v===F.fee?'selected':''}>${l}</option>`).join(''))}
+    ${filterActive?'<button class="btn btn-sm ghost" onclick="clearStudentsFilters()">Clear filters</button>':''}
+  </div><button class="btn primary" onclick="openAddStudent()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Register student</button></div>
   <div class="panel">
-    <div class="panel-head"><h3>${isSalesViewer?'My students':'Students'}</h3><div class="sub">${filtered.length} of ${myStudents.length}${studentsMonthFilter!=='All'?' enrolled in '+monthLabel(studentsMonthFilter):' on record'}</div></div>
+    <div class="panel-head"><h3>${isSalesViewer?'My students':'Students'}</h3><div class="sub">${filtered.length} of ${myStudents.length}${studentsMonthFilter!=='All'?' enrolled in '+monthLabel(studentsMonthFilter):' on record'}${filterActive&&studentsMonthFilter==='All'?' · filtered':''}</div></div>
     <div class="table-wrap"><table class="data"><thead><tr><th>Student</th><th>Course</th><th>Batch</th><th>Counsellor</th>${hidePayment?'':'<th class="num">Fee Due</th>'}<th>Status</th><th></th></tr></thead>
-      <tbody>${filtered.map(c=>{ const due=studentPaymentDue(c.id); return `<tr class="row-click" onclick="openStudentDetail('${c.id}')"><td>${studentCell(c.id)}</td><td class="muted" style="max-width:220px;"><span class="tag" style="margin:1px 3px 1px 0;">${esc(c.course)}</span></td><td class="muted mono">${esc(batchLabelFor(c))}</td><td class="muted">${esc(c.counsellor||'—')}</td>${hidePayment?'':`<td class="num mono" style="${due>0?'color:var(--neg);font-weight:700;':''}">${due>0?inr(due):'—'}</td>`}<td>${pill(c.status,studentStatusKind(c.status))}</td><td><button class="btn btn-sm ghost" onclick="event.stopPropagation();openEditStudent('${c.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></td></tr>`; }).join("") || `<tr><td colspan="${hidePayment?6:7}"><div class="empty">${isSalesViewer?'No students assigned to you yet.':'No students enrolled that month.'}</div></td></tr>`}</tbody>
+      <tbody>${filtered.map(c=>{ const due=studentPaymentDue(c.id); return `<tr class="row-click" onclick="openStudentDetail('${c.id}')"><td>${studentCell(c.id)}</td><td class="muted" style="max-width:220px;"><span class="tag" style="margin:1px 3px 1px 0;">${esc(c.course)}</span></td><td class="muted mono">${esc(batchLabelFor(c))}</td><td class="muted">${esc(c.counsellor||'—')}</td>${hidePayment?'':`<td class="num mono" style="${due>0?'color:var(--neg);font-weight:700;':''}">${due>0?inr(due):'—'}</td>`}<td>${pill(c.status,studentStatusKind(c.status))}</td><td><button class="btn btn-sm ghost" onclick="event.stopPropagation();openEditStudent('${c.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></td></tr>`; }).join("") || `<tr><td colspan="${hidePayment?6:7}"><div class="empty">${filterActive?'No students match these filters.':isSalesViewer?'No students assigned to you yet.':'No students enrolled yet.'}</div></td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
@@ -4952,7 +4977,7 @@ function courseDetailPage(name){
           <tbody>${mList.map(m=>`<tr><td style="font-weight:700;">${esc(m.title)}</td><td class="muted">${esc(m.type)}</td><td class="muted">${fmtDateShort(m.addedDate)}</td><td>${m.url?`<a class="btn btn-sm ghost" href="${esc(safeUrl(m.url))}" target="_blank" rel="noopener noreferrer">Open</a>`:'<span class="faint">no link</span>'}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">No materials uploaded yet.</div>`}
         <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;">Assignments<button class="btn btn-sm ghost" onclick="openAddAssignment(${jsq(name)})"><svg class="icon" style="width:12px;height:12px"><use href="#i-plus"/></svg>Assign new</button></div>
         ${aList.length?`<div class="table-wrap"><table class="data"><thead><tr><th>Assignment</th><th>Batch</th><th>Due</th><th class="num">Max Score</th><th class="num">Submitted</th><th></th></tr></thead>
-          <tbody>${aList.map(a=>{ const subs=submissionsOfAssignment(a.id); const submitted=subs.filter(s=>s.status!=='Not submitted').length; const b=batchById(a.batchId); return `<tr><td style="font-weight:700;">${esc(a.title)}</td><td class="muted">${b?esc(b.label):'—'}</td><td class="muted">${fmtDateShort(a.dueDate)}</td><td class="num mono">${a.maxScore}</td><td class="num mono">${submitted}/${subs.length}</td><td><button class="btn btn-sm ghost" onclick="openGradeAssignment('${a.id}')">Grade</button></td></tr>`; }).join("")}</tbody></table></div>`:`<div class="empty">No assignments given yet.</div>`}
+          <tbody>${aList.map(a=>{ const subs=submissionsOfAssignment(a.id); const submitted=subs.filter(s=>s.status!=='Not submitted').length; const b=batchById(a.batchId); return `<tr><td style="font-weight:700;">${esc(a.title)}</td><td class="muted">${b?esc(b.label):'—'}</td><td class="muted">${fmtDateShort(a.dueDate)}</td><td class="num mono">${a.maxScore}</td><td class="num mono">${submitted}/${subs.length}</td><td class="num" style="white-space:nowrap;"><button class="btn btn-sm ghost" onclick="openGradeAssignment('${a.id}')">Grade</button> <button class="btn btn-sm ghost" onclick="openEditAssignment('${a.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button> <button class="btn btn-sm danger" onclick="openDeleteAssignment('${a.id}')">Delete</button></td></tr>`; }).join("")}</tbody></table></div>`:`<div class="empty">No assignments given yet.</div>`}
       </div>
     </div>`;
 }
@@ -5597,12 +5622,35 @@ function updateAssignmentBatchOptions(course){
   if(!sel) return;
   sel.innerHTML = batchesOf(course).map(b=>`<option value="${b.id}">${esc(b.label)}</option>`).join('') || '<option disabled>— no batches for this course —</option>';
 }
+// Uploads picked files to the server (/api/files) and returns [{id,name,size}] — the record keeps only the id,
+// the bytes live in the database. Files over the limit or failing to upload are skipped with a message.
+const MAX_UPLOAD_BYTES = 2.8*1024*1024;
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(String(r.result).split(',')[1]||'');
+    r.onerror = ()=>reject(new Error('Could not read '+file.name));
+    r.readAsDataURL(file);
+  });
+}
+async function uploadPickedFiles(fileList){
+  const out = [];
+  for(const file of Array.from(fileList||[])){
+    if(file.size>MAX_UPLOAD_BYTES){ toast(file.name+" is too large (max 2.8 MB)"); continue; }
+    try{
+      const r = await api('files', {method:'POST', body:{name:file.name, type:file.type, data: await fileToBase64(file)}});
+      out.push({id:r.id, name:r.name, size:r.size});
+    }catch(err){ toast("Upload failed: "+err.message); }
+  }
+  return out;
+}
 // Reference-file attachments a trainer adds when creating an assignment (instructions, a template,
 // a rubric...) — staged here before the assignment exists, then handed to `a.attachments` on save.
 let pendingAssignmentAttachments = [];
-function handleAssignmentAttachSelect(e){
-  const files = Array.from(e.target.files || []);
-  files.forEach(file=>{ pendingAssignmentAttachments.push({name:file.name, size:file.size}); });
+async function handleAssignmentAttachSelect(e){
+  const picked = e.target.files;
+  const up = await uploadPickedFiles(picked);
+  pendingAssignmentAttachments.push(...up);
   e.target.value = "";
   const el = document.getElementById('assignment-attachments-list');
   if(el) el.innerHTML = genericAttachmentsListHTML(pendingAssignmentAttachments, 'removePendingAssignmentAttachment');
@@ -5649,13 +5697,59 @@ function openAddAssignment(preselectCourse){
     toast("Assigned to "+batchStudents(a.batchId).length+" student(s)"); closeModal(); render();
   });
 }
+// Edit an assignment's details. Course and batch stay fixed — students' submissions and scores are tied to them.
+function openEditAssignment(id){
+  const a = assignments.find(x=>x.id===id); if(!a) return;
+  showModal(`
+    <div class="modal-head"><h3>Edit assignment</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <form id="f-edit-assignment"><div class="modal-body">
+      <div><label class="field-label">Title</label><input class="field-input" name="title" required value="${esc(a.title)}"></div>
+      <div class="field-row">
+        <div><label class="field-label">Course</label><div>${esc(a.course)}</div></div>
+        <div><label class="field-label">Batch</label><div>${esc((batchById(a.batchId)||{}).label||'—')}</div></div>
+      </div>
+      <div class="field-row">
+        <div><label class="field-label">Type</label><select class="field-input" name="type">${["Assignment","Exam"].map(t=>`<option ${t===(a.type||'Assignment')?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div><label class="field-label">Max score</label><input class="field-input" type="number" min="1" name="maxScore" required value="${a.maxScore}"></div>
+      </div>
+      <div><label class="field-label">Due date</label><input class="field-input" type="date" name="dueDate" required value="${esc(a.dueDate)}"></div>
+      <div><label class="field-label">Description (optional)</label><textarea class="field-input" name="description" rows="3">${esc(a.description||'')}</textarea></div>
+    </div>
+    <div class="modal-foot"><button type="button" class="btn danger" onclick="openDeleteAssignment('${a.id}')">Delete</button><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Save changes</button></div></div>
+    </form>`);
+  document.getElementById("f-edit-assignment").addEventListener("submit", e=>{
+    e.preventDefault();
+    const f = new FormData(e.target);
+    a.title = f.get("title").trim(); a.type = f.get("type")||"Assignment"; a.dueDate = f.get("dueDate");
+    a.maxScore = Number(f.get("maxScore"))||a.maxScore; a.description = f.get("description");
+    // Scores already given can't exceed a lowered maximum.
+    submissionsOfAssignment(a.id).forEach(s=>{ if(s.score!=null && s.score>a.maxScore) s.score = a.maxScore; });
+    toast("Assignment updated"); closeModal(); render();
+  });
+}
+function openDeleteAssignment(id){
+  const a = assignments.find(x=>x.id===id); if(!a) return;
+  const subs = submissionsOfAssignment(id);
+  const graded = subs.filter(s=>s.status!=='Not submitted').length;
+  showModal(`
+    <div class="modal-head"><h3>Delete this assignment?</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body">
+      <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-archive"/></svg><div><b>${esc(a.title)}</b> (${esc(a.course)}). It disappears from every student's portal${graded?`, and the ${graded} submission${graded===1?'':'s'} and score${graded===1?'':'s'} already recorded are deleted with it`:''}. This can't be undone.</div></div>
+    </div>
+    <div class="modal-foot"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="button" class="btn danger" onclick="performDeleteAssignment('${id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-x"/></svg>Delete</button></div>`);
+}
+function performDeleteAssignment(id){
+  assignments = assignments.filter(x=>x.id!==id);
+  submissions = submissions.filter(s=>s.assignmentId!==id);
+  toast("Assignment deleted"); closeModal(); render();
+}
 // Trainer can keep adding reference files to a live assignment (not just at creation) — appended
 // straight to a.attachments and re-rendered in place inside the grading modal.
-function handleGradeAssignmentAttachSelect(e, assignmentId){
+async function handleGradeAssignmentAttachSelect(e, assignmentId){
   const a = assignments.find(x=>x.id===assignmentId);
   a.attachments = a.attachments || [];
-  const files = Array.from(e.target.files || []);
-  files.forEach(file=>{ a.attachments.push({name:file.name, size:file.size}); });
+  const up = await uploadPickedFiles(e.target.files);
+  a.attachments.push(...up);
   e.target.value = "";
   const el = document.getElementById('grade-assignment-attachments-list');
   if(el) el.innerHTML = genericAttachmentsListHTML(a.attachments, "removeGradeAssignmentAttachment_"+assignmentId.replace(/[^A-Za-z0-9]/g,''));
@@ -5971,7 +6065,7 @@ function openAddBatchTask(batchId){
 function genericAttachmentsListHTML(list, removeFnName){
   if(!list || !list.length) return `<div class="empty" style="padding:8px 0;">No files attached.</div>`;
   return `<div style="display:flex;flex-direction:column;gap:6px;">${list.map((a,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;">
-    <span style="display:flex;align-items:center;gap:6px;overflow:hidden;"><svg class="icon" style="width:12px;height:12px;flex:none;color:var(--ink-faint);"><use href="#i-paperclip"/></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.name)}</span><span class="faint">${fmtFileSize(a.size)}</span></span>
+    <span style="display:flex;align-items:center;gap:6px;overflow:hidden;"><svg class="icon" style="width:12px;height:12px;flex:none;color:var(--ink-faint);"><use href="#i-paperclip"/></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.id?`<a href="/api/files?id=${encodeURIComponent(a.id)}" download style="color:var(--accent,inherit);text-decoration:underline;" onclick="event.stopPropagation()">${esc(a.name)}</a>`:esc(a.name)}</span><span class="faint">${fmtFileSize(a.size)}</span></span>
     ${removeFnName?`<button type="button" class="btn btn-sm ghost" onclick="${removeFnName}(${i})"><svg class="icon" style="width:11px;height:11px"><use href="#i-x"/></svg></button>`:''}
   </div>`).join('')}</div>`;
 }
@@ -7791,9 +7885,9 @@ function studentPortalAssignments(s){
 // Staged files for the submission the student currently has open — reset each time the modal opens,
 // written to the submission record on Submit.
 let pendingSubmissionAttachments = [];
-function handleSubmissionAttachSelect(e){
-  const files = Array.from(e.target.files || []);
-  files.forEach(file=>{ pendingSubmissionAttachments.push({name:file.name, size:file.size}); });
+async function handleSubmissionAttachSelect(e){
+  const up = await uploadPickedFiles(e.target.files);
+  pendingSubmissionAttachments.push(...up);
   e.target.value = "";
   const el = document.getElementById('submission-attachments-list');
   if(el) el.innerHTML = genericAttachmentsListHTML(pendingSubmissionAttachments, 'removePendingSubmissionAttachment');
