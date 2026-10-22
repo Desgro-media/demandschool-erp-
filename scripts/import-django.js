@@ -139,7 +139,12 @@ for (const p of of('employees.payroll')) {
   const x = f(p), id = empIdOf(x.employee), month = `${x.payroll_year}-${pad(x.payroll_month)}`;
   if (!id) continue;
   const h = (payroll.history[month] = payroll.history[month] || { entries: {} });
-  h.entries[id] = { gross: num(x.gross_salary), netOverride: num(x.net_salary), payments: (payPay.get(p.pk) || []).map(q => ({ amount: num(f(q).amount_paid), date: day(f(q).payment_date), note: f(q).remarks || 'Salary payment' })) };
+  const payments = (payPay.get(p.pk) || []).map(q => ({ amount: num(f(q).amount_paid), date: day(f(q).payment_date), note: f(q).remarks || 'Salary payment' }));
+  // The old ERP marked a month 'completed' even when the payments came to a little under net (rounding, small
+  // shortfalls) — honour that so it doesn't turn into a fresh "Partially Paid".
+  const paid = payments.reduce((t, q) => t + q.amount, 0);
+  const settled = String(x.status).toLowerCase() === 'completed' && paid > 0;
+  h.entries[id] = { gross: num(x.gross_salary), netOverride: settled ? Math.min(num(x.net_salary), paid) : num(x.net_salary), payments };
 }
 
 /* ---------- students & invoices ---------- */
