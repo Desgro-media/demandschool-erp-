@@ -5622,12 +5622,35 @@ function updateAssignmentBatchOptions(course){
   if(!sel) return;
   sel.innerHTML = batchesOf(course).map(b=>`<option value="${b.id}">${esc(b.label)}</option>`).join('') || '<option disabled>— no batches for this course —</option>';
 }
+// Uploads picked files to the server (/api/files) and returns [{id,name,size}] — the record keeps only the id,
+// the bytes live in the database. Files over the limit or failing to upload are skipped with a message.
+const MAX_UPLOAD_BYTES = 2.8*1024*1024;
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(String(r.result).split(',')[1]||'');
+    r.onerror = ()=>reject(new Error('Could not read '+file.name));
+    r.readAsDataURL(file);
+  });
+}
+async function uploadPickedFiles(fileList){
+  const out = [];
+  for(const file of Array.from(fileList||[])){
+    if(file.size>MAX_UPLOAD_BYTES){ toast(file.name+" is too large (max 2.8 MB)"); continue; }
+    try{
+      const r = await api('files', {method:'POST', body:{name:file.name, type:file.type, data: await fileToBase64(file)}});
+      out.push({id:r.id, name:r.name, size:r.size});
+    }catch(err){ toast("Upload failed: "+err.message); }
+  }
+  return out;
+}
 // Reference-file attachments a trainer adds when creating an assignment (instructions, a template,
 // a rubric...) — staged here before the assignment exists, then handed to `a.attachments` on save.
 let pendingAssignmentAttachments = [];
-function handleAssignmentAttachSelect(e){
-  const files = Array.from(e.target.files || []);
-  files.forEach(file=>{ pendingAssignmentAttachments.push({name:file.name, size:file.size}); });
+async function handleAssignmentAttachSelect(e){
+  const picked = e.target.files;
+  const up = await uploadPickedFiles(picked);
+  pendingAssignmentAttachments.push(...up);
   e.target.value = "";
   const el = document.getElementById('assignment-attachments-list');
   if(el) el.innerHTML = genericAttachmentsListHTML(pendingAssignmentAttachments, 'removePendingAssignmentAttachment');
@@ -5722,11 +5745,11 @@ function performDeleteAssignment(id){
 }
 // Trainer can keep adding reference files to a live assignment (not just at creation) — appended
 // straight to a.attachments and re-rendered in place inside the grading modal.
-function handleGradeAssignmentAttachSelect(e, assignmentId){
+async function handleGradeAssignmentAttachSelect(e, assignmentId){
   const a = assignments.find(x=>x.id===assignmentId);
   a.attachments = a.attachments || [];
-  const files = Array.from(e.target.files || []);
-  files.forEach(file=>{ a.attachments.push({name:file.name, size:file.size}); });
+  const up = await uploadPickedFiles(e.target.files);
+  a.attachments.push(...up);
   e.target.value = "";
   const el = document.getElementById('grade-assignment-attachments-list');
   if(el) el.innerHTML = genericAttachmentsListHTML(a.attachments, "removeGradeAssignmentAttachment_"+assignmentId.replace(/[^A-Za-z0-9]/g,''));
@@ -6042,7 +6065,7 @@ function openAddBatchTask(batchId){
 function genericAttachmentsListHTML(list, removeFnName){
   if(!list || !list.length) return `<div class="empty" style="padding:8px 0;">No files attached.</div>`;
   return `<div style="display:flex;flex-direction:column;gap:6px;">${list.map((a,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;">
-    <span style="display:flex;align-items:center;gap:6px;overflow:hidden;"><svg class="icon" style="width:12px;height:12px;flex:none;color:var(--ink-faint);"><use href="#i-paperclip"/></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.name)}</span><span class="faint">${fmtFileSize(a.size)}</span></span>
+    <span style="display:flex;align-items:center;gap:6px;overflow:hidden;"><svg class="icon" style="width:12px;height:12px;flex:none;color:var(--ink-faint);"><use href="#i-paperclip"/></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.id?`<a href="/api/files?id=${encodeURIComponent(a.id)}" download style="color:var(--accent,inherit);text-decoration:underline;" onclick="event.stopPropagation()">${esc(a.name)}</a>`:esc(a.name)}</span><span class="faint">${fmtFileSize(a.size)}</span></span>
     ${removeFnName?`<button type="button" class="btn btn-sm ghost" onclick="${removeFnName}(${i})"><svg class="icon" style="width:11px;height:11px"><use href="#i-x"/></svg></button>`:''}
   </div>`).join('')}</div>`;
 }
@@ -7862,9 +7885,9 @@ function studentPortalAssignments(s){
 // Staged files for the submission the student currently has open — reset each time the modal opens,
 // written to the submission record on Submit.
 let pendingSubmissionAttachments = [];
-function handleSubmissionAttachSelect(e){
-  const files = Array.from(e.target.files || []);
-  files.forEach(file=>{ pendingSubmissionAttachments.push({name:file.name, size:file.size}); });
+async function handleSubmissionAttachSelect(e){
+  const up = await uploadPickedFiles(e.target.files);
+  pendingSubmissionAttachments.push(...up);
   e.target.value = "";
   const el = document.getElementById('submission-attachments-list');
   if(el) el.innerHTML = genericAttachmentsListHTML(pendingSubmissionAttachments, 'removePendingSubmissionAttachment');
