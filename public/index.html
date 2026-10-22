@@ -838,10 +838,17 @@ function computePayrollRow(emp, month){
   // Advance salary paid out during this month is part of this month's pay already handed over, so it comes off the net.
   const advanceRecovery = Math.min(advancePaidInMonth(emp.id, month), Math.max(0, gross-lopDeduction-wfhDeduction));
   const totalDeductions = lopDeduction+wfhDeduction+advanceRecovery;
-  const net = gross-totalDeductions;
+  // Months migrated from the old ERP carry the net that was actually settled there (its own leave/advance
+  // maths), so their payments are compared with that, not with a fresh recalculation.
+  const hasNetOverride = typeof rec.netOverride==="number" && rec.netOverride>0;
+  const net = hasNetOverride ? rec.netOverride : gross-totalDeductions;
   const paid = (rec.payments||[]).reduce((s,p)=>s+p.amount,0);
   const balance = Math.max(0, net-paid);
   const payStatus = paid<=0 ? "Unpaid" : balance>0 ? "Partially Paid" : "Paid";
+  if(hasNetOverride){   // show the migrated month's real cut as one figure instead of a recalculated LOP/WFH/advance split
+    const cut = Math.max(0, gross-net);
+    return {basic,hra,special,gross,advanceRecovery:0,lopDays:0,lopDeduction:cut,wfhExcessDays:0,wfhDeduction:0,monthWorkingDays,totalDeductions:cut,net,paid,balance,payStatus,migrated:true};
+  }
   return {basic,hra,special,gross,advanceRecovery,lopDays,lopDeduction,wfhExcessDays,wfhDeduction,monthWorkingDays,totalDeductions,net,paid,balance,payStatus};
 }
 // Small "incl. Xd LOP / Yd WFH@75%" subtext shown under a payroll row's Deductions figure — shared by
@@ -2789,7 +2796,7 @@ function workspacePayroll(){
     <div class="panel-body">
       <div class="calc-line"><span>Salary</span><span class="mono">${inr(c.gross)}</span></div>
       <div class="calc-line"><span>Pay cuts</span><span class="mono ${payCuts>0?'':'faint'}" style="${payCuts>0?'color:var(--neg);':''}">${payCuts>0?'−'+inr(payCuts):'none'}</span></div>
-      ${c.lopDeduction>0?`<div class="calc-line" style="padding-left:14px;"><span class="faint" style="font-size:12.5px;">Loss of Pay — ${c.lopDays} day${c.lopDays===1?"":"s"} beyond ${hrPolicy.paidLeavesPerMonth}/month</span><span class="mono faint" style="font-size:12.5px;">−${inr(c.lopDeduction)}</span></div>`:""}
+      ${c.lopDeduction>0&&!c.migrated?`<div class="calc-line" style="padding-left:14px;"><span class="faint" style="font-size:12.5px;">Loss of Pay — ${c.lopDays} day${c.lopDays===1?"":"s"} beyond ${hrPolicy.paidLeavesPerMonth}/month</span><span class="mono faint" style="font-size:12.5px;">−${inr(c.lopDeduction)}</span></div>`:""}
       ${c.wfhDeduction>0?`<div class="calc-line" style="padding-left:14px;"><span class="faint" style="font-size:12.5px;">WFH beyond ${hrPolicy.paidWfhPerMonth}/month — ${c.wfhExcessDays} day${c.wfhExcessDays===1?"":"s"} at 75%</span><span class="mono faint" style="font-size:12.5px;">−${inr(c.wfhDeduction)}</span></div>`:""}
       <div class="calc-line total"><span>Final salary</span><span class="mono">${inr(c.net)}</span></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">

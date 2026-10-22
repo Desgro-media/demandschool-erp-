@@ -100,12 +100,26 @@ const leaveRequests = of('employees.employeeleaverequest').map(l => {
   return { id: 'LR-D' + l.pk, empId: empIdOf(x.employee), type: /wfh/.test(x.leave_type) ? 'WFH' : 'Casual/Sick', duration: from === to ? (DUR[x.leave_day_type] || 'Full Day') : 'Full Day', from, to, days, reason: x.reason || '', status: cap(x.status), applied: day(x.created) };
 }).filter(l => l.empId).sort((a, b) => b.applied.localeCompare(a.applied));
 
+// Django links an advance payment to the employee (and a payroll month), not to one request, so spread each
+// employee's payments over their PAID requests oldest-first, never more than a request's amount. (Attaching
+// every payment to every request counted the same money repeatedly.)
 const advPaid = new Map();
 for (const p of of('employees.advancesalarypayment')) { const a = advPaid.get(f(p).employee) || []; a.push(p); advPaid.set(f(p).employee, a); }
-const advances = of('employees.advancesalaryrequest').map(a => {
+for (const a of advPaid.values()) a.sort((p, q) => day(f(p).payment_date).localeCompare(day(f(q).payment_date)));
+const advLeft = new Map([...advPaid].map(([emp, ps]) => [emp, ps.map(p => ({ amount: num(f(p).amount_paid), date: day(f(p).payment_date), note: f(p).remarks || 'Advance paid' }))]));
+const advances = of('employees.advancesalaryrequest').slice().sort((a, b) => day(f(a).created).localeCompare(day(f(b).created))).map(a => {
   const x = f(a);
   const rec = { id: 'ADV-D' + a.pk, empId: empIdOf(x.employee), amount: num(x.requested_amount), reason: x.reason || '', requested: day(x.created), status: cap(x.status), payments: [] };
-  if (x.status === 'PAID') rec.payments = (advPaid.get(x.employee) || []).map(p => ({ amount: num(f(p).amount_paid), date: day(f(p).payment_date), note: f(p).remarks || 'Advance paid' }));
+  if (x.status === 'PAID') {
+    const queue = advLeft.get(x.employee) || [];
+    let need = rec.amount;
+    while (need > 0 && queue.length) {
+      const take = Math.min(need, queue[0].amount);
+      rec.payments.push({ ...queue[0], amount: take });
+      need -= take; queue[0].amount -= take;
+      if (queue[0].amount <= 0) queue.shift();
+    }
+  }
   return rec;
 }).filter(a => a.empId);
 
@@ -125,7 +139,7 @@ for (const p of of('employees.payroll')) {
   const x = f(p), id = empIdOf(x.employee), month = `${x.payroll_year}-${pad(x.payroll_month)}`;
   if (!id) continue;
   const h = (payroll.history[month] = payroll.history[month] || { entries: {} });
-  h.entries[id] = { gross: num(x.gross_salary), payments: (payPay.get(p.pk) || []).map(q => ({ amount: num(f(q).amount_paid), date: day(f(q).payment_date), note: f(q).remarks || 'Salary payment' })) };
+  h.entries[id] = { gross: num(x.gross_salary), netOverride: num(x.net_salary), payments: (payPay.get(p.pk) || []).map(q => ({ amount: num(f(q).amount_paid), date: day(f(q).payment_date), note: f(q).remarks || 'Salary payment' })) };
 }
 
 /* ---------- students & invoices ---------- */
@@ -210,12 +224,19 @@ for (const [key, incoming] of Object.entries(result)) {
     const old = Array.isArray(existing) ? existing : [];
     const have = new Set(old.map(idOf));
     value = [...old, ...incoming.filter(r => !have.has(idOf(r)))];
+    // Re-runs repair advances imported earlier (they used to carry duplicated payments); app-created ones are untouched.
+    if (key === 'advances') { const fresh = new Map(incoming.map(r => [r.id, r])); value = value.map(r => (r && /^ADV-D/.test(r.id) && fresh.has(r.id)) ? { ...r, payments: fresh.get(r.id).payments } : r); }
   } else if (key === 'attendanceByDate') {
     value = { ...(existing || {}) };
     for (const [d, rec] of Object.entries(incoming)) value[d] = { ...rec, ...(value[d] || {}) };
   } else if (key === 'payroll') {
     value = { selectedMonth: (existing && existing.selectedMonth) || incoming.selectedMonth, history: { ...(existing && existing.history || {}) } };
-    for (const [m, h] of Object.entries(incoming.history)) value.history[m] = { entries: { ...h.entries, ...((value.history[m] || {}).entries || {}) } };
+    for (const [m, h] of Object.entries(incoming.history)) {
+      const cur = (value.history[m] || {}).entries || {}, entries = { ...h.entries, ...cur };
+      // Entries imported before netOverride existed get it now; everything else HR/Finance edited stays as it is.
+      for (const [id, e] of Object.entries(cur)) if (e.netOverride == null && h.entries[id]) entries[id] = { ...e, netOverride: h.entries[id].netOverride };
+      value.history[m] = { ...(value.history[m] || {}), entries };
+    }
   } else value = { ...incoming, ...(existing || {}) };
   const ver = await store.setState(key, value, row ? row.version : 0, null);
   if (ver == null) { console.error(`Skipped ${key}: changed while importing, re-run`); continue; }
