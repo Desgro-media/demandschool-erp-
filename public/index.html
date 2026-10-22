@@ -799,6 +799,13 @@ let quotesMonthFilter = "All";
 function setQuotesMonthFilter(v){ quotesMonthFilter = v; render(); }
 let studentsMonthFilter = "All";
 function setStudentsMonthFilter(v){ studentsMonthFilter = v; render(); }
+// Students list filters: free-text search plus Course / Batch / Status / Fee due, combined with the Enrolled month.
+const studentsFilters = {q:"", course:"All", batch:"All", status:"All", fee:"All"};
+function setStudentsFilter(key, v){
+  studentsFilters[key] = v; render();
+  if(key==='q'){ const el = document.getElementById('students-search'); if(el){ el.focus(); el.setSelectionRange(v.length, v.length); } }   // render() rebuilds the input
+}
+function clearStudentsFilters(){ Object.assign(studentsFilters, {q:"", course:"All", batch:"All", status:"All", fee:"All"}); studentsMonthFilter = "All"; render(); }
 let invoicesMonthFilter = "All";
 function setInvoicesMonthFilter(v){ invoicesMonthFilter = v; render(); }
 // Accounts-side "Today / month-wise / All time" filters — one per dated list under the Accounts
@@ -4417,14 +4424,32 @@ function visibleStudents(){
 function studentsAll(){
   const myStudents = visibleStudents();
   const isSalesViewer = !!(currentUser && isSalesRole(currentUser));
-  const filtered = myStudents.filter(c=>studentsMonthFilter==='All' || c.onboarded.slice(0,7)===studentsMonthFilter);
+  const F = studentsFilters, q = F.q.trim().toLowerCase();
   const hidePayment = isStaffRole(currentUser);
+  const filtered = myStudents.filter(c=>
+    (studentsMonthFilter==='All' || c.onboarded.slice(0,7)===studentsMonthFilter)
+    && (F.course==='All' || c.course===F.course)
+    && (F.batch==='All' || batchLabelFor(c)===F.batch)
+    && (F.status==='All' || c.status===F.status)
+    && (hidePayment || F.fee==='All' || (F.fee==='due' ? studentPaymentDue(c.id)>0 : studentPaymentDue(c.id)<=0))
+    && (!q || [c.name, c.course, c.counsellor, c.place, c.phone, c.email].some(v=>String(v||'').toLowerCase().includes(q))));
+  const opts = (vals, cur) => ['All',...[...new Set(vals.filter(Boolean))].sort()].map(v=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${v==='All'?'All':esc(v)}</option>`).join('');
+  const filterActive = studentsMonthFilter!=='All' || q || ['course','batch','status','fee'].some(k=>F[k]!=='All');
+  const sel = (label, key, optionsHtml) => `<div class="filter-group"><span class="filter-label">${label}</span><select class="select-sm" onchange="setStudentsFilter('${key}',this.value)">${optionsHtml}</select></div>`;
   return `
-  <div class="toolbar"><div class="filter-group"><span class="filter-label">Enrolled</span><select class="select-sm" onchange="setStudentsMonthFilter(this.value)">${monthFilterOptions(myStudents.map(c=>c.onboarded), studentsMonthFilter)}</select></div><button class="btn primary" onclick="openAddStudent()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Register student</button></div>
+  <div class="toolbar" style="flex-wrap:wrap;gap:10px;"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <input id="students-search" class="select-sm" style="min-width:200px;" type="search" placeholder="Search name, course, counsellor…" value="${esc(F.q)}" oninput="setStudentsFilter('q',this.value)">
+    <div class="filter-group"><span class="filter-label">Enrolled</span><select class="select-sm" onchange="setStudentsMonthFilter(this.value)">${monthFilterOptions(myStudents.map(c=>c.onboarded), studentsMonthFilter)}</select></div>
+    ${sel('Course','course',opts(myStudents.map(c=>c.course),F.course))}
+    ${sel('Batch','batch',opts(myStudents.map(batchLabelFor),F.batch))}
+    ${sel('Status','status',['All','Active','Paused','Completed','Dropped'].map(v=>`<option ${v===F.status?'selected':''}>${v}</option>`).join(''))}
+    ${hidePayment?'':sel('Fees','fee',[['All','All'],['due','Fee due'],['clear','No dues']].map(([v,l])=>`<option value="${v}" ${v===F.fee?'selected':''}>${l}</option>`).join(''))}
+    ${filterActive?'<button class="btn btn-sm ghost" onclick="clearStudentsFilters()">Clear filters</button>':''}
+  </div><button class="btn primary" onclick="openAddStudent()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Register student</button></div>
   <div class="panel">
-    <div class="panel-head"><h3>${isSalesViewer?'My students':'Students'}</h3><div class="sub">${filtered.length} of ${myStudents.length}${studentsMonthFilter!=='All'?' enrolled in '+monthLabel(studentsMonthFilter):' on record'}</div></div>
+    <div class="panel-head"><h3>${isSalesViewer?'My students':'Students'}</h3><div class="sub">${filtered.length} of ${myStudents.length}${studentsMonthFilter!=='All'?' enrolled in '+monthLabel(studentsMonthFilter):' on record'}${filterActive&&studentsMonthFilter==='All'?' · filtered':''}</div></div>
     <div class="table-wrap"><table class="data"><thead><tr><th>Student</th><th>Course</th><th>Batch</th><th>Counsellor</th>${hidePayment?'':'<th class="num">Fee Due</th>'}<th>Status</th><th></th></tr></thead>
-      <tbody>${filtered.map(c=>{ const due=studentPaymentDue(c.id); return `<tr class="row-click" onclick="openStudentDetail('${c.id}')"><td>${studentCell(c.id)}</td><td class="muted" style="max-width:220px;"><span class="tag" style="margin:1px 3px 1px 0;">${esc(c.course)}</span></td><td class="muted mono">${esc(batchLabelFor(c))}</td><td class="muted">${esc(c.counsellor||'—')}</td>${hidePayment?'':`<td class="num mono" style="${due>0?'color:var(--neg);font-weight:700;':''}">${due>0?inr(due):'—'}</td>`}<td>${pill(c.status,studentStatusKind(c.status))}</td><td><button class="btn btn-sm ghost" onclick="event.stopPropagation();openEditStudent('${c.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></td></tr>`; }).join("") || `<tr><td colspan="${hidePayment?6:7}"><div class="empty">${isSalesViewer?'No students assigned to you yet.':'No students enrolled that month.'}</div></td></tr>`}</tbody>
+      <tbody>${filtered.map(c=>{ const due=studentPaymentDue(c.id); return `<tr class="row-click" onclick="openStudentDetail('${c.id}')"><td>${studentCell(c.id)}</td><td class="muted" style="max-width:220px;"><span class="tag" style="margin:1px 3px 1px 0;">${esc(c.course)}</span></td><td class="muted mono">${esc(batchLabelFor(c))}</td><td class="muted">${esc(c.counsellor||'—')}</td>${hidePayment?'':`<td class="num mono" style="${due>0?'color:var(--neg);font-weight:700;':''}">${due>0?inr(due):'—'}</td>`}<td>${pill(c.status,studentStatusKind(c.status))}</td><td><button class="btn btn-sm ghost" onclick="event.stopPropagation();openEditStudent('${c.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></td></tr>`; }).join("") || `<tr><td colspan="${hidePayment?6:7}"><div class="empty">${filterActive?'No students match these filters.':isSalesViewer?'No students assigned to you yet.':'No students enrolled yet.'}</div></td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
