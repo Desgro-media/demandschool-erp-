@@ -291,7 +291,8 @@ function openPositionModal(partnerId, posId){
   const p = partnerById(partnerId);
   const pos = posId ? positionById(partnerId, posId) : null;
   const used = pos ? placements.filter(x=>x.positionId===pos.id).length : 0;
-  const courseOpts = ["Any", ...internshipCourses(), ...(pos && pos.course!=="Any" && !internshipCourses().includes(pos.course) ? [pos.course] : [])];
+  // Every course in the catalog (not only ones flagged for internships), plus the position's current course if it has since been removed.
+  const courseOpts = ["Any", ...COURSES, ...(pos && pos.course!=="Any" && !COURSES.includes(pos.course) ? [pos.course] : [])];
   showModal(`
     <div class="modal-head"><h3>${pos?'Edit position':'Add position'} — ${esc(p.name)}</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-position"><div class="modal-body">
