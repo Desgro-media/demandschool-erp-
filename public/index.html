@@ -620,11 +620,12 @@ function dayAttendanceStatus(empId, date){
 }
 // Counts actual leave/WFH days an employee has been marked for within a given month, from real
 // attendance records (not the annual casual/sick/earned entitlement banks) — the basis for the
-// monthly paid-leave/paid-WFH cap in hrPolicy. Caps at today for the current month.
+// monthly paid-leave/paid-WFH cap in hrPolicy.
 function monthlyAttendanceCounts(empId, month){
   const [y,m] = month.split("-").map(Number);
-  const isCurrent = month===TODAY.slice(0,7);
-  const lastDay = isCurrent ? Number(TODAY.slice(8,10)) : daysInCalendarMonth(y,m);
+  // Whole month, including days still ahead: a day only has a non-present status if someone recorded it
+  // (e.g. HR approved a leave/WFH request for a future date), and that should already reach payroll.
+  const lastDay = daysInCalendarMonth(y,m);
   let leave=0, wfh=0, absent=0, half=0, pwfh=0, unpaid=0;
   for(let d=1; d<=lastDay; d++){
     const status = dayAttendanceStatus(empId, `${month}-${String(d).padStart(2,'0')}`);
