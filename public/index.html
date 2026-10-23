@@ -191,6 +191,7 @@
   table.data tr:last-child td{border-bottom:none;}
   table.data tbody tr:hover{background:var(--surface-sunk);}
   table.data td.num,table.data th.num{text-align:right;}
+  .leave-requests-table thead th{position:sticky;top:0;z-index:1;background:var(--surface);} /* long request list scrolls inside its panel, header stays put */
   table.data tr.total td{font-weight:800;background:var(--surface-sunk);}
   .row-click{cursor:pointer;}
   .muted{color:var(--ink-soft);}
@@ -3272,7 +3273,7 @@ function hrLeave(){
   <div class="toolbar"><div class="filter-group"><span class="filter-label">Show</span><select class="select-sm" onchange="setLeaveRequestsMonthFilter(this.value)">${dateFilterOptions(leaveRequests.map(l=>l.from), leaveRequestsMonthFilter)}</select></div><button class="btn primary" onclick="openAddLeave()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>New request</button></div>
   <div class="panel">
     <div class="panel-head"><h3>Requests</h3><div class="sub">${sorted.length} of ${leaveRequests.length}${dateFilterSuffix(leaveRequestsMonthFilter)}</div></div>
-    <div class="table-wrap"><table class="data"><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+    <div class="table-wrap" style="max-height:380px;overflow-y:auto;"><table class="data leave-requests-table"><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th>Status</th><th></th></tr></thead>
       <tbody>${sorted.length ? sorted.map(l=>{
         const emp=byId(l.empId);
         const range = l.from===l.to ? fmtDateShort(l.from) : `${fmtDateShort(l.from)} – ${fmtDateShort(l.to)}`;
