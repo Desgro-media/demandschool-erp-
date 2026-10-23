@@ -17,6 +17,47 @@ function academicDaySummary(p){
   for(let i=0; i<remainder; i++) if(weekdays.has(new Date(start+i*86400000).getUTCDay())) working++;
   return {total, working, off:total-working};
 }
+// Day-wise planner built from the programme settings: one calendar day for every class day (the
+// ticked weekdays; everything else is a weekly holiday) between commencement and planning end, stamped
+// with the class timings. Generated days are flagged `auto` so a later change to the schedule can move
+// or drop the ones nobody has touched, while any day with a trainer/topic/notes (or one added by hand
+// or imported from a PDF) is never removed, and a date that already has a day is never doubled up.
+// Runs whenever the programme settings are saved, and from the "Generate from schedule" button.
+function academicScheduleDates(p){
+  if(!p.commencement || !p.planningEnd || !p.classDays.length || p.planningEnd<p.commencement) return [];
+  const days=new Set(p.classDays.map(Number)), out=[];
+  for(let t=Date.parse(p.commencement+'T00:00:00Z'), end=Date.parse(p.planningEnd+'T00:00:00Z'); t<=end; t+=86400000){
+    if(days.has(new Date(t).getUTCDay())) out.push(new Date(t).toISOString().slice(0,10));
+  }
+  return out;
+}
+function academicSessionTouched(s){
+  return !s.auto || !!(s.trainerName || s.topic || s.covered || s.activity || s.progressNotes || s.module || s.dayLabel) || (s.status && s.status!=='Planned');
+}
+function syncAcademicCalendar(b){
+  const p=academicPlanOf(b), dates=academicScheduleDates(p);
+  if(!dates.length) return 0;
+  const cal=ensureBatchCalendar(b);
+  const want=new Set(dates);
+  let kept=cal.filter(s=>academicSessionTouched(s) || want.has(s.date));
+  const have=new Set(kept.map(s=>s.date));
+  let added=0;
+  for(const date of dates){
+    if(have.has(date)) continue;
+    kept.push({id:nextCalSessionId(), date, trainerType:'staff', trainerName:'', topic:'', syllabusRef:'', status:'Planned', auto:true});
+    added++;
+  }
+  kept.forEach(s=>{ if(s.auto){ s.classStart=p.classStart||''; s.classEnd=p.classEnd||''; } });
+  kept.sort((x,y)=>(x.date||'9999').localeCompare(y.date||'9999'));
+  b.calendar=kept;
+  return added;
+}
+function generateAcademicCalendar(batchId){
+  const b=batchById(batchId); if(!b || !canManageAcademicPlanner()) return;
+  if(!academicScheduleDates(academicPlanOf(b)).length){ toast('Set commencement, planning end and class days in Programme & policies first'); return; }
+  const n=syncAcademicCalendar(b);
+  render(); toast(n?`${n} class day${n===1?'':'s'} added from the schedule`:'Planner already matches the schedule');
+}
 // Display faculty evidence directly from saved logs: no duplicate batch write or manual sync.
 function academicCalendarProgress(b){
   const latest=new Map();
@@ -93,10 +134,10 @@ function academicPlanner(){
         ${p.notes?academicField('Notes',p.notes):''}
       </div>
     </div>
-    <div class="panel"><div class="panel-head"><div><h3>Day-wise academic planner</h3><div class="sub">Planned topics, faculty delivery and assignment progress</div></div>${editable?`<button class="btn btn-sm primary" onclick="openAddCalendarSession(${bid})">Add day</button>`:''}</div>
+    <div class="panel"><div class="panel-head"><div><h3>Day-wise academic planner</h3><div class="sub">Planned topics, faculty delivery and assignment progress</div></div>${editable?`<div style="display:flex;gap:6px;"><button class="btn btn-sm ghost" title="Fill in any class days missing from the planner, using the dates, class days and timings above" onclick="generateAcademicCalendar(${bid})">Generate from schedule</button><button class="btn btn-sm primary" onclick="openAddCalendarSession(${bid})">Add day</button></div>`:''}</div>
       <div class="toolbar" style="padding:12px 16px;"><div class="filter-group"><label class="filter-label" for="academic-faculty">Faculty</label><select class="select-sm" id="academic-faculty" onchange="academicFaculty=this.value;render()"><option value="">All faculty</option>${faculty.map(f=>`<option value="${esc(f)}" ${f===academicFaculty?'selected':''}>${esc(f)}</option>`).join('')}</select><label class="filter-label" for="academic-filter-status">Status</label><select class="select-sm" id="academic-filter-status" onchange="academicStatus=this.value;render()"><option value="">All statuses</option>${ACADEMIC_STATUSES.map(s=>`<option ${s===academicStatus?'selected':''}>${s}</option>`).join('')}</select></div><span class="subtext">${rows.length} of ${cal.length} sessions</span></div>
       <div class="table-wrap"><table class="data academic-planner-table"><thead><tr><th>Day / Date</th><th>Module</th><th>Planned topic</th><th>Faculty</th><th>Topic covered</th><th>Assignment / Activity</th><th>Status / Notes</th>${editable?'<th>Actions</th>':''}</tr></thead><tbody>
-        ${rows.map(({s,i})=>`<tr><td>${esc(s.dayLabel || 'Day '+(i+1))}<div class="subtext">${s.date?fmtDateShort(s.date):'Unscheduled'}</div></td><td>${esc(s.module || '—')}</td><td>${esc(s.topic || '—')}</td><td>${esc(s.trainerName || 'Unassigned')}</td><td>${esc(s.covered || '—')}${academicFacultyLogHTML(s.facultyLog)}</td><td>${esc(s.activity || '—')}</td><td>${academicStatusPill(s)}${s.progressNotes?`<div class="subtext">${esc(s.progressNotes)}</div>`:''}</td>${editable?`<td><div style="display:flex;gap:4px;flex-wrap:wrap;"><button class="btn btn-sm ghost" onclick="openEditCalendarSession(${bid},${jsq(s.id)})">Edit</button><button class="btn btn-sm ghost" title="Insert day above" onclick="openAddCalendarSession(${bid},${i})">↑ Add</button><button class="btn btn-sm ghost" onclick="confirmAcademicDayRemoval(${bid},${jsq(s.id)})">Remove</button></div></td>`:''}</tr>`).join('') || `<tr><td colspan="${editable?8:7}"><div class="empty">${cal.length?'No sessions match these filters.':'No days planned yet. Add a day to start tracking faculty progress.'}</div></td></tr>`}
+        ${rows.map(({s,i})=>`<tr><td>${esc(s.dayLabel || 'Day '+(i+1))}<div class="subtext">${s.date?fmtDateShort(s.date)+(s.date?' · '+ACADEMIC_DAYS[new Date(s.date+'T00:00:00Z').getUTCDay()].slice(0,3):''):'Unscheduled'}${s.classStart&&s.classEnd?' · '+esc(s.classStart)+'–'+esc(s.classEnd):''}</div></td><td>${esc(s.module || '—')}</td><td>${esc(s.topic || '—')}</td><td>${esc(s.trainerName || 'Unassigned')}</td><td>${esc(s.covered || '—')}${academicFacultyLogHTML(s.facultyLog)}</td><td>${esc(s.activity || '—')}</td><td>${academicStatusPill(s)}${s.progressNotes?`<div class="subtext">${esc(s.progressNotes)}</div>`:''}</td>${editable?`<td><div style="display:flex;gap:4px;flex-wrap:wrap;"><button class="btn btn-sm ghost" onclick="openEditCalendarSession(${bid},${jsq(s.id)})">Edit</button><button class="btn btn-sm ghost" title="Insert day above" onclick="openAddCalendarSession(${bid},${i})">↑ Add</button><button class="btn btn-sm ghost" onclick="confirmAcademicDayRemoval(${bid},${jsq(s.id)})">Remove</button></div></td>`:''}</tr>`).join('') || `<tr><td colspan="${editable?8:7}"><div class="empty">${cal.length?'No sessions match these filters.':'No days planned yet. Add a day to start tracking faculty progress.'}</div></td></tr>`}
       </tbody></table></div>
     </div>
     ${academicExtraTable(b,'specialSessions')}
@@ -130,6 +171,8 @@ function openAcademicSettings(id){
       next.minAttendance=next.minAttendance===''?'':Number(next.minAttendance);
       if(next.minAttendance!=='' && (!Number.isFinite(next.minAttendance)||next.minAttendance<0||next.minAttendance>100)) return 'Minimum attendance must be between 0 and 100.';
       b.academicPlan=next;
+      const added=syncAcademicCalendar(b);
+      if(added) toast(`${added} class day${added===1?'':'s'} added to the day-wise planner`);
     });
 }
 const ACADEMIC_EXTRA = {
