@@ -744,6 +744,33 @@ function wfhExcessDaysFor(empId, month){
 let leaveRequests = [];
 // One place for the leave numbers shown to HR and to staff: requests still awaiting HR (pending), paid leave
 // used/left against hrPolicy.paidLeavesPerMonth, and unpaid days (leave beyond the allowance + "Unpaid Leave"-type days).
+// Which leave types an employee may still apply for in the month of `from`. Casual/Sick needs paid leave left
+// (approved days + pending requests both count); once it's gone only WFH / Partially Paid WFH / Unpaid Leave remain.
+// WFH needs paid WFH left — after that only Partially Paid WFH (75%) is offered.
+function leaveTypeAvailability(empId, from){
+  const month = (from || TODAY).slice(0,7);
+  const c = monthlyAttendanceCounts(empId, month);
+  const pending = (type)=>leaveRequests.filter(l=>l.empId===empId && l.status==="Pending" && l.type===type && (l.from||"").slice(0,7)===month).reduce((n,l)=>n+(Number(l.days)||0),0);
+  return {
+    casual: c.leave + pending("Casual/Sick") < hrPolicy.paidLeavesPerMonth,
+    wfh: c.wfh + pending("WFH") < hrPolicy.paidWfhPerMonth,
+  };
+}
+// Greys out the unavailable types in a leave form's Type select and moves the choice to one that's allowed.
+function applyLeaveTypeLimits(selectEl, empId, from){
+  if(!selectEl || !empId) return;
+  const av = leaveTypeAvailability(empId, from);
+  [...selectEl.options].forEach(o=>{
+    if(!o.hasAttribute("value")) o.setAttribute("value", o.value); // keep the value when the label text changes below
+    const blocked = (o.value==="Casual/Sick" && !av.casual) || (o.value==="WFH" && !av.wfh);
+    o.disabled = blocked;
+    o.textContent = o.value + (o.value==="Casual/Sick" && blocked ? " — paid leave used up" : o.value==="WFH" && blocked ? " — paid WFH used up" : "");
+  });
+  if(selectEl.selectedOptions[0] && selectEl.selectedOptions[0].disabled){
+    const ok = [...selectEl.options].find(o=>!o.disabled);
+    if(ok) selectEl.value = ok.value;
+  }
+}
 function leaveSummaryFor(empId, month){
   const c = monthlyAttendanceCounts(empId, month);
   const pending = leaveRequests.filter(l=>l.empId===empId && l.status==="Pending" && (l.from||"").slice(0,7)===month);
@@ -2633,6 +2660,8 @@ function openApplyLeave(){
     let days = Math.max(1, Math.round((new Date(to)-new Date(from))/86400000)+1);
     if(from===to && duration==="Half Day") days = 0.5;
     if(from===to && duration==="Quarter Day") days = 0.25;
+    const av = leaveTypeAvailability(currentUser.id, from), chosen = f.get("type");
+    if((chosen==="Casual/Sick" && !av.casual) || (chosen==="WFH" && !av.wfh)){ toast("You've used your paid "+(chosen==="WFH"?"WFH":"leave")+" for this month — choose Partially Paid WFH or Unpaid Leave"); return; }
     leaveRequests.unshift({id:"LR-"+(400+leaveRequests.length+1), empId:currentUser.id, type:f.get("type"), duration:(from===to?duration:"Full Day"), from, to, days, reason:f.get("reason"), status:"Pending", applied:TODAY});
     toast("Leave request submitted"); closeModal(); render();
   });
@@ -2648,6 +2677,7 @@ function updateLeaveImpactNote(){
   const typeEl = document.getElementById('leave-type');
   const noteEl = document.getElementById('leave-impact-note');
   if(!fromEl || !toEl || !noteEl || !currentUser) return;
+  applyLeaveTypeLimits(typeEl, currentUser.id, fromEl.value);
   const from = fromEl.value, to = toEl.value;
   const duration = durationEl ? durationEl.value : 'Full Day';
   const isWfh = typeEl ? typeEl.value === 'WFH' : false;
@@ -3972,11 +4002,15 @@ function openEditEmployee(id){
     grantLogin("staff", e.id, String(f.get("email")||"").trim(), newPw);
   });
 }
+function refreshHrLeaveTypes(){
+  const form = document.getElementById("f-add-leave");
+  if(form) applyLeaveTypeLimits(form.elements.type, form.elements.empId.value, form.elements.from.value);
+}
 function openAddLeave(){
   showModal(`
     <div class="modal-head"><h3>New leave request</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-add-leave"><div class="modal-body">
-      <div><label class="field-label">Employee</label><select class="field-input" name="empId">${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
+      <div><label class="field-label">Employee</label><select class="field-input" name="empId" onchange="refreshHrLeaveTypes()">${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
       <div class="field-row">
         <div><label class="field-label">Type</label><select class="field-input" name="type"><option>Casual/Sick</option><option>WFH</option><option>Partially Paid WFH (75% payout)</option><option>Unpaid Leave</option></select></div>
         <div><label class="field-label">Duration</label><select class="field-input" name="duration"><option value="Full Day">Full Day</option><option value="Half Day">Half Day</option><option value="Quarter Day">Quarter Day</option></select></div>
@@ -3990,7 +4024,10 @@ function openAddLeave(){
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Submit request</button></div></div>
     </form>`);
-  document.getElementById("f-add-leave").addEventListener("submit", e=>{
+  const hrForm = document.getElementById("f-add-leave");
+  hrForm.elements.from.addEventListener("change", refreshHrLeaveTypes);
+  refreshHrLeaveTypes();
+  hrForm.addEventListener("submit", e=>{
     e.preventDefault();
     const f = new FormData(e.target);
     const from=f.get("from"), to=f.get("to");
@@ -3998,6 +4035,8 @@ function openAddLeave(){
     let days = Math.max(1, Math.round((new Date(to)-new Date(from))/86400000)+1);
     if(from===to && duration==="Half Day") days = 0.5;
     if(from===to && duration==="Quarter Day") days = 0.25;
+    const av = leaveTypeAvailability(f.get("empId"), from), chosen = f.get("type");
+    if((chosen==="Casual/Sick" && !av.casual) || (chosen==="WFH" && !av.wfh)){ toast("Paid "+(chosen==="WFH"?"WFH":"leave")+" is used up for this employee this month — choose Partially Paid WFH or Unpaid Leave"); return; }
     leaveRequests.unshift({id:"LR-"+(400+leaveRequests.length+1), empId:f.get("empId"), type:f.get("type"), duration:(from===to?duration:"Full Day"), from, to, days, reason:f.get("reason"), status:"Pending", applied:TODAY});
     toast("Leave request submitted"); closeModal(); render();
   });
