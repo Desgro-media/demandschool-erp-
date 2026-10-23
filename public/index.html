@@ -1089,6 +1089,20 @@ function calSessionTrainerCell(s, hideGuestTag){
 function batchCalendarRowsHTML(b, readOnly){
   const cal = calendarOf(b);
   if(!cal.length) return `<div class="empty">No academic calendar set for this batch yet.</div>`;
+  // Student view mirrors the coordinator's Academic Planner: same day numbering, weekday, class time,
+  // module, topic, assignment and progress status, read straight from the shared batch record.
+  if(readOnly){
+    const rows = (typeof academicCalendarProgress==='function') ? academicCalendarProgress(b) : cal;
+    return `<div class="table-wrap"><table class="data"><thead><tr><th>Day / Date</th><th>Trainer</th><th>Module &amp; topic</th><th>Assignment / Activity</th><th>Status</th></tr></thead><tbody>
+    ${rows.map((s,idx)=>`<tr>
+      <td>${esc(s.dayLabel||('Day '+(idx+1)))}<div class="subtext">${s.date?fmtDateShort(s.date)+' · '+ACADEMIC_DAYS[new Date(s.date+'T00:00:00Z').getUTCDay()].slice(0,3):'No date'}${s.classStart&&s.classEnd?' · '+esc(s.classStart)+'–'+esc(s.classEnd):''}</div></td>
+      <td>${s.trainerName?esc(s.trainerName):'<span class="faint">To be announced</span>'}</td>
+      <td>${s.module?`<div class="subtext">${esc(s.module)}</div>`:''}${esc(s.topic||'—')}</td>
+      <td>${esc(s.activity||'—')}</td>
+      <td>${academicStatusPill(s)}</td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+  }
   return `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Trainer</th><th>Topic</th>${readOnly?'':'<th></th>'}</tr></thead><tbody>
     ${cal.map((s,idx)=>`<tr>
       <td class="muted">${s.date?fmtDateShort(s.date):'<span class="faint">no date</span>'}</td>
@@ -7968,6 +7982,7 @@ function studentPortalCalendar(s){
   <div class="panel">
     <div class="panel-head"><h3>${esc(batch.label)}</h3><div class="sub">${esc(batch.course)} · session-by-session schedule</div></div>
     <div class="modal-body">
+      ${(()=>{ const p = academicPlanOf(batch); const bits = [p.commencement&&p.planningEnd?`${fmtDate(p.commencement)} – ${fmtDate(p.planningEnd)}`:'', p.classDays.length?p.classDays.map(d=>ACADEMIC_DAYS[d].slice(0,3)).join(', '):'', p.classStart&&p.classEnd?`${p.classStart}–${p.classEnd}`:'', p.classDays.length?'weekly off: '+(ACADEMIC_DAYS.filter((_,i)=>!p.classDays.includes(i)).map(d=>d.slice(0,3)).join(', ')||'none'):''].filter(Boolean); return bits.length?`<div class="subtext" style="margin-bottom:10px;">${bits.map(esc).join(' · ')}</div>`:''; })()}
       ${batchCalendarRowsHTML(batch, true)}
     </div>
   </div>`;
