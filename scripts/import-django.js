@@ -199,7 +199,7 @@ const marketingLeads = of('leads.lead').map(l => {
   const x = f(l), s = sources.get(x.source) ? f(sources.get(x.source)).name.toLowerCase() : '';
   return { id: 'MLD-' + pad(l.pk), name: x.full_name, phone: x.phone || '', email: x.email || '', source: SRC[s] || 'Organic', courseInterested: x.course ? courseName.get(x.course) || '' : '', leadOwner: x.assigned_to ? (empNameOf(x.assigned_to) || null) : null, createdDate: day(x.created), status: statuses.get(x.status) ? cap(f(statuses.get(x.status)).name) : undefined, remarks: x.remarks || undefined };
 });
-const STAGE = { idea: 'Idea', scripting: 'Scripting', production: 'Production', graphic: 'Production', edit: 'Review', review: 'Review', scheduled: 'Scheduled', published: 'Published' };
+const STAGE = { idea: 'Idea', scripting: 'Scripting', production: 'Production', graphic: 'Production', edit: 'Editing', review: 'Review', scheduled: 'Scheduled', published: 'Published' };
 const contentItems = of('marketing.contentitem').map((c, i) => {
   const x = f(c);
   return { id: 1000 + c.pk, title: x.title, type: cap(x.content_type), stage: STAGE[x.stage] || 'Idea', assignee: empNameOf(x.assignee), due: day(x.due_date), notes: x.notes || '', platforms: (x.platforms || '').split(',').map(s => s.trim()).filter(Boolean).map(cap).map(s => s === 'Linkedin' ? 'LinkedIn' : s) };
