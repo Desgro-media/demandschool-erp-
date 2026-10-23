@@ -742,6 +742,20 @@ function wfhExcessDaysFor(empId, month){
   return Math.max(0, counts.wfh - hrPolicy.paidWfhPerMonth) + counts.pwfh;
 }
 let leaveRequests = [];
+// One place for the leave numbers shown to HR and to staff: requests still awaiting HR (pending), paid leave
+// used/left against hrPolicy.paidLeavesPerMonth, and unpaid days (leave beyond the allowance + "Unpaid Leave"-type days).
+function leaveSummaryFor(empId, month){
+  const c = monthlyAttendanceCounts(empId, month);
+  const pending = leaveRequests.filter(l=>l.empId===empId && l.status==="Pending" && (l.from||"").slice(0,7)===month);
+  const cap = hrPolicy.paidLeavesPerMonth;
+  return {
+    pendingRequests: pending.length,
+    pendingDays: pending.reduce((n,l)=>n+(Number(l.days)||0),0),
+    paidTaken: Math.min(c.leave, cap),
+    paidLeft: Math.max(0, cap - c.leave),
+    unpaidDays: Math.max(0, c.leave - cap) + c.unpaid,
+  };
+}
 
 // Advance Salary — money against THIS month's salary before it's earned. HR only decides Pending vs
 // Approved/Rejected; once Approved, it's Finance's call in Accounts > Payment Requests whether to pay
@@ -2556,6 +2570,7 @@ function workspaceLeave(){
   const wfhLeft = Math.max(0, hrPolicy.paidWfhPerMonth - counts.wfh);
   const lopDays = lopDaysFor(currentUser.id, month);
   const wfhExcessDays = wfhExcessDaysFor(currentUser.id, month);
+  const ls = leaveSummaryFor(currentUser.id, month);
   const hasImpact = lopDays>0 || wfhExcessDays>0;
   return `
   <div class="toolbar"><div></div><button class="btn primary" onclick="openApplyLeave()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Apply for leave</button></div>
@@ -2565,6 +2580,8 @@ function workspaceLeave(){
       <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
         <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidLeavesPerMonth}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
         <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid WFH left</div><div class="kpi-value mono ${wfhLeft<=0?'warn':''}">${wfhLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidWfhPerMonth}</span></div><div class="kpi-sub">${counts.wfh} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Pending requests</div><div class="kpi-value mono ${ls.pendingRequests?'warn':''}">${ls.pendingRequests}</div><div class="kpi-sub">${ls.pendingDays} day${ls.pendingDays===1?'':'s'} awaiting HR</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Unpaid leave days</div><div class="kpi-value mono ${ls.unpaidDays?'warn':''}">${ls.unpaidDays}</div><div class="kpi-sub">${ls.paidLeft<=0?'Paid leave used up — further leave is unpaid':'Leave beyond '+hrPolicy.paidLeavesPerMonth+'/month is unpaid'}</div></div>
       </div>
       ${hasImpact ? `
       <div class="banner" style="margin-top:12px;">
@@ -2672,6 +2689,7 @@ function workspaceAttendance(){
   const wfhLeft = Math.max(0, hrPolicy.paidWfhPerMonth - counts.wfh);
   const lopDays = lopDaysFor(currentUser.id, month);
   const wfhExcessDays = wfhExcessDaysFor(currentUser.id, month);
+  const ls = leaveSummaryFor(currentUser.id, month);
   const hasImpact = lopDays>0 || wfhExcessDays>0;
   return `
   <div class="kpi-grid cols-5">
@@ -2691,6 +2709,8 @@ function workspaceAttendance(){
       <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
         <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidLeavesPerMonth}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
         <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid WFH left</div><div class="kpi-value mono ${wfhLeft<=0?'warn':''}">${wfhLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidWfhPerMonth}</span></div><div class="kpi-sub">${counts.wfh} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Pending requests</div><div class="kpi-value mono ${ls.pendingRequests?'warn':''}">${ls.pendingRequests}</div><div class="kpi-sub">${ls.pendingDays} day${ls.pendingDays===1?'':'s'} awaiting HR</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Unpaid leave days</div><div class="kpi-value mono ${ls.unpaidDays?'warn':''}">${ls.unpaidDays}</div><div class="kpi-sub">${ls.paidLeft<=0?'Paid leave used up — further leave is unpaid':'Leave beyond '+hrPolicy.paidLeavesPerMonth+'/month is unpaid'}</div></div>
       </div>
       ${hasImpact ? `
       <div class="banner" style="margin-top:12px;">
@@ -3189,8 +3209,8 @@ function hrLeave(){
   </div>
   <div class="panel">
     <div class="panel-head"><h3>Leave &amp; WFH — ${esc(monthLabel(summaryMonth))}</h3><div class="sub">${hrPolicy.paidLeavesPerMonth} paid leave day &amp; ${hrPolicy.paidWfhPerMonth} paid WFH day per employee per month — set in HR Settings</div></div>
-    <div class="table-wrap"><table class="data"><thead><tr><th>Employee</th><th class="num">Leave taken</th><th class="num">LOP days</th><th class="num">WFH taken</th><th class="num">WFH pay-cut days</th></tr></thead>
-      <tbody>${employees.map(e=>{ const c=monthlyAttendanceCounts(e.id,summaryMonth); const lop=lopDaysFor(e.id,summaryMonth); const wfhCut=wfhExcessDaysFor(e.id,summaryMonth); return `<tr><td>${personCell(e)}</td><td class="num">${c.leave}</td><td class="num ${lop>0?'neg':''}">${lop||'—'}</td><td class="num">${c.wfh}</td><td class="num ${wfhCut>0?'neg':''}">${wfhCut||'—'}</td></tr>`; }).join("")}</tbody>
+    <div class="table-wrap"><table class="data"><thead><tr><th>Employee</th><th class="num">Pending requests</th><th class="num">Paid leave taken</th><th class="num">Paid leave left</th><th class="num">Unpaid leave days</th><th class="num">LOP days</th><th class="num">WFH taken</th><th class="num">WFH pay-cut days</th></tr></thead>
+      <tbody>${employees.map(e=>{ const c=monthlyAttendanceCounts(e.id,summaryMonth); const ls=leaveSummaryFor(e.id,summaryMonth); const lop=lopDaysFor(e.id,summaryMonth); const wfhCut=wfhExcessDaysFor(e.id,summaryMonth); return `<tr><td>${personCell(e)}</td><td class="num ${ls.pendingRequests?'warn':''}">${ls.pendingRequests?`${ls.pendingRequests} (${ls.pendingDays}d)`:'—'}</td><td class="num">${ls.paidTaken} / ${hrPolicy.paidLeavesPerMonth}</td><td class="num">${ls.paidLeft}</td><td class="num ${ls.unpaidDays>0?'neg':''}">${ls.unpaidDays||'—'}</td><td class="num ${lop>0?'neg':''}">${lop||'—'}</td><td class="num">${c.wfh}</td><td class="num ${wfhCut>0?'neg':''}">${wfhCut||'—'}</td></tr>`; }).join("")}</tbody>
     </table></div>
   </div>`;
 }
@@ -4163,11 +4183,14 @@ function decideLeave(id,decision){
   const l = leaveRequests.find(x=>x.id===id);
   l.status = decision;
   if(decision==="Approved" && (!l.duration || l.duration==="Full Day")){
-    const status = {"WFH":"wfh","Partially Paid WFH (75% payout)":"pwfh","Unpaid Leave":"unpaid"}[l.type] || "leave";
+    const baseStatus = {"WFH":"wfh","Partially Paid WFH (75% payout)":"pwfh","Unpaid Leave":"unpaid"}[l.type] || "leave";
     let d = new Date(l.from+"T00:00:00");
     const end = new Date(l.to+"T00:00:00");
     while(d<=end){
       const ds = d.toISOString().slice(0,10);
+      // Casual/Sick uses the month's paid allowance first; every day past it is recorded as Unpaid Leave.
+      let status = baseStatus;
+      if(baseStatus==="leave" && dayAttendanceStatus(l.empId, ds)!=="leave" && monthlyAttendanceCounts(l.empId, ds.slice(0,7)).leave >= hrPolicy.paidLeavesPerMonth) status = "unpaid";
       attendanceRecordFor(ds)[l.empId] = {status, in:null};
       d.setDate(d.getDate()+1);
     }
