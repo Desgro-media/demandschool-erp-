@@ -625,15 +625,17 @@ function monthlyAttendanceCounts(empId, month){
   const [y,m] = month.split("-").map(Number);
   const isCurrent = month===TODAY.slice(0,7);
   const lastDay = isCurrent ? Number(TODAY.slice(8,10)) : daysInCalendarMonth(y,m);
-  let leave=0, wfh=0, absent=0, half=0;
+  let leave=0, wfh=0, absent=0, half=0, pwfh=0, unpaid=0;
   for(let d=1; d<=lastDay; d++){
     const status = dayAttendanceStatus(empId, `${month}-${String(d).padStart(2,'0')}`);
     if(status==="absent") absent++;
     else if(status==="half") half++;
     else if(status==="leave") leave++;
     else if(status==="wfh") wfh++;
+    else if(status==="pwfh") pwfh++;
+    else if(status==="unpaid") unpaid++;
   }
-  return {leave, wfh, absent, half};
+  return {leave, wfh, absent, half, pwfh, unpaid};
 }
 // Projects the payroll impact of a leave request BEFORE it's even submitted — splits the requested
 // date range by calendar month (a request can straddle month-end) and, for each month touched, adds
@@ -731,12 +733,13 @@ function calendarEventsForMonth(monthStr){
 function lopDaysFor(empId, month){
   const counts = monthlyAttendanceCounts(empId, month);
   // Unapproved absence is a full LOP day and a half day is half a LOP day; neither uses up the paid-leave allowance.
-  return Math.max(0, counts.leave - hrPolicy.paidLeavesPerMonth) + counts.absent + counts.half*0.5;
+  return Math.max(0, counts.leave - hrPolicy.paidLeavesPerMonth) + counts.absent + counts.unpaid + counts.half*0.5;
 }
 // WFH days beyond the monthly paid-WFH allowance: paid at 75% (a 25% cut) rather than a full LOP.
 function wfhExcessDaysFor(empId, month){
   const counts = monthlyAttendanceCounts(empId, month);
-  return Math.max(0, counts.wfh - hrPolicy.paidWfhPerMonth);
+  // "Partially Paid WFH" days are always 75% — they never draw on the paid-WFH allowance.
+  return Math.max(0, counts.wfh - hrPolicy.paidWfhPerMonth) + counts.pwfh;
 }
 let leaveRequests = [];
 
@@ -1307,7 +1310,12 @@ const PLATFORMS = [
   {key:'Instagram', icon:'i-instagram'}, {key:'LinkedIn', icon:'i-linkedin'},
   {key:'YouTube', icon:'i-youtube'}, {key:'Facebook', icon:'i-facebook'}, {key:'Blog', icon:'i-globe'},
 ];
-const CONTENT_TEAM = ['Amina Farook','Rishab K','Jithin Das','Risvan'];
+// Assignable content team = the live (not Left) Marketing-department employees, so the Assignee list follows HR.
+function contentTeam(extra){
+  const names = activeEmployees().filter(e=>e.dept==='Marketing').map(e=>e.name);
+  if(extra && !names.includes(extra)) names.push(extra);
+  return names;
+}
 
 let contentItems = [];
 let contentNextId = 100;
@@ -2323,7 +2331,7 @@ function viewDashboard(){
   const publishedMTD = contentItems.filter(c=>c.stage==="Published" && c.due.slice(0,7)===TODAY.slice(0,7)).length;
 
   const needsReview = [
-    ...leaveRequests.filter(l=>l.status==="Pending").map(l=>({txt:`${byId(l.empId).name} requested ${l.days} day${l.days>1?'s':''} ${l.type==="WFH"?"work from home":l.type.toLowerCase()+" leave"}`, sub:`applied ${fmtDateShort(l.applied)}`})),
+    ...leaveRequests.filter(l=>l.status==="Pending").map(l=>({txt:`${byId(l.empId).name} requested ${l.days} day${l.days>1?'s':''} ${l.type==="WFH"?"work from home":/^(Partially|Unpaid)/.test(l.type)?l.type.toLowerCase():l.type.toLowerCase()+" leave"}`, sub:`applied ${fmtDateShort(l.applied)}`})),
     ...advances.filter(a=>a.status==="Pending").map(a=>({txt:`${byId(a.empId).name} requested a ${inr(a.amount)} advance`, sub:esc(a.reason)})),
     ...sessionLogs.filter(l=>l.status==="Pending").map(l=>({txt:`${l.trainerName} submitted a session log for approval`, sub:`${batchById(l.batchId)?batchById(l.batchId).label:''} · ${l.hours} hrs · ${fmtDateShort(l.date)}`})),
     ...invoices.filter(i=>invoiceStatus(i)==="Overdue").map(i=>({txt:`${studentById(i.studentId).name} — invoice ${i.invoiceNo} overdue`, sub:`${inr(invoiceBalance(i))} · due ${fmtDateShort(i.due)}`})),
@@ -2586,7 +2594,7 @@ function openApplyLeave(){
     <form id="f-apply-leave"><div class="modal-body">
       <div class="banner muted"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>Submitted to HR for approval. You have <b>${leaveLeft} of ${hrPolicy.paidLeavesPerMonth}</b> paid leave day${hrPolicy.paidLeavesPerMonth===1?"":"s"} and <b>${wfhLeft} of ${hrPolicy.paidWfhPerMonth}</b> paid WFH day${hrPolicy.paidWfhPerMonth===1?"":"s"} left for ${esc(MONTH_LABEL[month]||month)} — anything beyond either allowance affects your pay.</div></div>
       <div class="field-row">
-        <div><label class="field-label">Type</label><select class="field-input" id="leave-type" name="type" onchange="updateLeaveImpactNote()"><option>Casual/Sick</option><option>WFH</option></select></div>
+        <div><label class="field-label">Type</label><select class="field-input" id="leave-type" name="type" onchange="updateLeaveImpactNote()"><option>Casual/Sick</option><option>WFH</option><option>Partially Paid WFH (75% payout)</option><option>Unpaid Leave</option></select></div>
         <div><label class="field-label">Duration</label><select class="field-input" id="leave-duration" name="duration" onchange="updateLeaveImpactNote()"><option value="Full Day">Full Day</option><option value="Half Day">Half Day</option><option value="Quarter Day">Quarter Day</option></select></div>
       </div>
       <div class="field-row">
@@ -2628,6 +2636,14 @@ function updateLeaveImpactNote(){
   const isWfh = typeEl ? typeEl.value === 'WFH' : false;
   if(!from || !to || to<from || (from===to && duration!=='Full Day')){
     noteEl.innerHTML = '';
+    return;
+  }
+  const reqType = typeEl ? typeEl.value : '';
+  if(reqType==='Unpaid Leave' || reqType.startsWith('Partially Paid WFH')){
+    noteEl.innerHTML = `<div class="banner" style="margin-top:2px;margin-bottom:10px;">
+      <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
+      <div><b>${reqType==='Unpaid Leave'?'Full Loss of Pay for every day of this request.':'Paid at 75% — a 25% pay cut for every day of this request.'}</b> It doesn't use up your monthly paid allowance.</div>
+    </div>`;
     return;
   }
   const impact = leaveImpactPreview(currentUser.id, from, to, isWfh ? 'wfh' : 'leave');
@@ -2900,7 +2916,7 @@ function decideWithdrawal(id, decision){
 
 /* ===================== HR ===================== */
 function statusKind(s){
-  const map = {Present:"pos",Late:"warn","Half Day":"warn","On Leave":"neutral",Absent:"neg","Work From Home":"blue",
+  const map = {Present:"pos",Late:"warn","Half Day":"warn","On Leave":"neutral",Absent:"neg","Work From Home":"blue","Partially Paid WFH":"warn","Unpaid Leave":"neg",
     Approved:"pos",Pending:"warn",Rejected:"neg",Paid:"pos",Open:"blue",Interview:"warn",Offer:"pos",Hired:"pos",Applied:"neutral",Shortlisted:"warn",Filled:"pos","On Hold":"neutral",
     Permanent:"pos",Probation:"warn","Guest Trainer":"blue",
     "Notice Period":"warn",Left:"neg",Active:"neutral",
@@ -2908,7 +2924,7 @@ function statusKind(s){
     New:"warn",Reviewed:"blue",Resolved:"pos"};
   return map[s] || "neutral";
 }
-function attendanceLabel(s){ return {present:"Present",late:"Late",half:"Half Day",absent:"Absent",leave:"On Leave",wfh:"Work From Home"}[s]; }
+function attendanceLabel(s){ return {present:"Present",late:"Late",half:"Half Day",absent:"Absent",leave:"On Leave",wfh:"Work From Home",pwfh:"Partially Paid WFH",unpaid:"Unpaid Leave"}[s]; }
 
 function hrOverview(){
   const active = activeEmployees();
@@ -2926,7 +2942,7 @@ function hrOverview(){
   const deptCounts = DEPARTMENTS.map(d=>({d,n:active.filter(e=>e.dept===d).length})).sort((a,b)=>b.n-a.n);
   const maxDept = Math.max(...deptCounts.map(x=>x.n));
   const needsReview = [
-    ...leaveRequests.filter(l=>l.status==="Pending").map(l=>({txt:`${byId(l.empId).name} requested ${l.days} day${l.days>1?'s':''} ${l.type==="WFH"?"work from home":l.type.toLowerCase()+" leave"}`, sub:`${fmtDateShort(l.from)}${l.from!==l.to?' – '+fmtDateShort(l.to):''} · applied ${fmtDateShort(l.applied)}`})),
+    ...leaveRequests.filter(l=>l.status==="Pending").map(l=>({txt:`${byId(l.empId).name} requested ${l.days} day${l.days>1?'s':''} ${l.type==="WFH"?"work from home":/^(Partially|Unpaid)/.test(l.type)?l.type.toLowerCase():l.type.toLowerCase()+" leave"}`, sub:`${fmtDateShort(l.from)}${l.from!==l.to?' – '+fmtDateShort(l.to):''} · applied ${fmtDateShort(l.applied)}`})),
     ...advances.filter(a=>a.status==="Pending").map(a=>({txt:`${byId(a.empId).name} requested a ${inr(a.amount)} advance`, sub:esc(a.reason)+" · "+fmtDateShort(a.requested)})),
     ...sessionLogs.filter(l=>l.status==="Pending").map(l=>({txt:`${l.trainerName} submitted a session log for approval`, sub:`${batchById(l.batchId)?batchById(l.batchId).label:''} · ${l.hours} hrs · ${fmtDateShort(l.date)}`})),
   ].slice(0,5);
@@ -3942,7 +3958,7 @@ function openAddLeave(){
     <form id="f-add-leave"><div class="modal-body">
       <div><label class="field-label">Employee</label><select class="field-input" name="empId">${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
       <div class="field-row">
-        <div><label class="field-label">Type</label><select class="field-input" name="type"><option>Casual/Sick</option><option>WFH</option></select></div>
+        <div><label class="field-label">Type</label><select class="field-input" name="type"><option>Casual/Sick</option><option>WFH</option><option>Partially Paid WFH (75% payout)</option><option>Unpaid Leave</option></select></div>
         <div><label class="field-label">Duration</label><select class="field-input" name="duration"><option value="Full Day">Full Day</option><option value="Half Day">Half Day</option><option value="Quarter Day">Quarter Day</option></select></div>
       </div>
       <div class="field-row">
@@ -4147,7 +4163,7 @@ function decideLeave(id,decision){
   const l = leaveRequests.find(x=>x.id===id);
   l.status = decision;
   if(decision==="Approved" && (!l.duration || l.duration==="Full Day")){
-    const status = l.type==="WFH" ? "wfh" : "leave";
+    const status = {"WFH":"wfh","Partially Paid WFH (75% payout)":"pwfh","Unpaid Leave":"unpaid"}[l.type] || "leave";
     let d = new Date(l.from+"T00:00:00");
     const end = new Date(l.to+"T00:00:00");
     while(d<=end){
@@ -4297,7 +4313,7 @@ function initContentBoard(){
   const all = ['All', ...PLATFORMS.map(p=>p.key)];
   chipWrap.innerHTML = all.map(k=>`<button class="chip ${k===contentPlatformFilter?'active':''}" onclick="setPlatformFilter('${k}')">${k}</button>`).join(' ');
   const sel = document.getElementById('assignee-filter');
-  sel.innerHTML = '<option value="All">All assignees</option>' + CONTENT_TEAM.map(t=>`<option>${t}</option>`).join('') + '<option value="Unassigned">Unassigned</option>';
+  sel.innerHTML = '<option value="All">All assignees</option>' + contentTeam().map(t=>`<option>${esc(t)}</option>`).join('') + '<option value="Unassigned">Unassigned</option>';
   renderBoard();
 }
 function setPlatformFilter(k){ contentPlatformFilter = k; initContentBoard(); }
@@ -4386,7 +4402,7 @@ function openContentModal(id, presetStage){
       </div>
       <div><label class="field-label">Platforms</label><div class="check-row" id="f-platforms">${PLATFORMS.map(p=>`<label class="check-chip" id="chip-${p.key}"><input type="checkbox" value="${p.key}" onchange="onPlatformCheck('${p.key}')"><svg class="icon" style="width:12px;height:12px"><use href="#${p.icon}"/></svg>${p.key}</label>`).join('')}</div></div>
       <div class="field-row">
-        <div><label class="field-label">Assignee</label><select class="field-input" id="f-assignee"><option value="">Unassigned</option>${CONTENT_TEAM.map(t=>`<option>${t}</option>`).join('')}</select></div>
+        <div><label class="field-label">Assignee</label><select class="field-input" id="f-assignee"><option value="">Unassigned</option>${contentTeam(item&&item.assignee).map(t=>`<option ${item&&item.assignee===t?'selected':''}>${esc(t)}</option>`).join('')}</select></div>
         <div><label class="field-label">Due date</label><input class="field-input" type="date" id="f-due" value="${item?item.due:''}"></div>
       </div>
       <div><label class="field-label">Brief / notes</label><textarea class="field-input" id="f-notes" placeholder="Angle, references, key points…">${item?esc(item.notes):''}</textarea></div>
