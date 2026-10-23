@@ -620,11 +620,12 @@ function dayAttendanceStatus(empId, date){
 }
 // Counts actual leave/WFH days an employee has been marked for within a given month, from real
 // attendance records (not the annual casual/sick/earned entitlement banks) — the basis for the
-// monthly paid-leave/paid-WFH cap in hrPolicy. Caps at today for the current month.
+// monthly paid-leave/paid-WFH cap in hrPolicy.
 function monthlyAttendanceCounts(empId, month){
   const [y,m] = month.split("-").map(Number);
-  const isCurrent = month===TODAY.slice(0,7);
-  const lastDay = isCurrent ? Number(TODAY.slice(8,10)) : daysInCalendarMonth(y,m);
+  // Whole month, including days still ahead: a day only has a non-present status if someone recorded it
+  // (e.g. HR approved a leave/WFH request for a future date), and that should already reach payroll.
+  const lastDay = daysInCalendarMonth(y,m);
   let leave=0, wfh=0, absent=0, half=0, pwfh=0, unpaid=0;
   for(let d=1; d<=lastDay; d++){
     const status = dayAttendanceStatus(empId, `${month}-${String(d).padStart(2,'0')}`);
@@ -637,6 +638,42 @@ function monthlyAttendanceCounts(empId, month){
   }
   return {leave, wfh, absent, half, pwfh, unpaid};
 }
+// ---- Per-employee, per-month leave balance ----
+// Paid leave in a month = carried over from last month's unused balance + this month's earned allowance
+// (hrPolicy.paidLeavesPerMonth) + any HR adjustment. Carry-over only starts from hrPolicy.leaveCarryStart, so
+// months already run through payroll before balances existed are never changed. WFH never carries forward:
+// its monthly allowance is just the earned days + HR adjustment. HR edits adjustments in the "Balance" modal
+// (Leave Requests page); they live in hrPolicy.leaveAdjustments so they sync like the rest of the policy.
+function leaveAdjustmentFor(empId, month){
+  const a = (hrPolicy.leaveAdjustments||{})[empId+"|"+month];
+  return {leave:Number(a&&a.leave)||0, wfh:Number(a&&a.wfh)||0};
+}
+function prevMonthOf(month){ const [y,m]=month.split("-").map(Number); return m===1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,"0")}`; }
+// Paid leave days actually taken: whole days marked "leave" in attendance plus approved half/quarter-day Casual/Sick requests.
+function paidLeaveUsedFor(empId, month){
+  const whole = monthlyAttendanceCounts(empId, month).leave;
+  const part = leaveRequests.filter(l=>l.empId===empId && l.status==="Approved" && l.type==="Casual/Sick" && l.duration && l.duration!=="Full Day" && (l.from||"").slice(0,7)===month).reduce((n,l)=>n+(Number(l.days)||0),0);
+  return whole + part;
+}
+function leaveBalanceFor(empId, month){
+  const start = hrPolicy.leaveCarryStart || "2026-10";
+  const carried = month>start ? Math.max(0, leaveBalanceFor(empId, prevMonthOf(month)).balance) : 0;
+  const earned = hrPolicy.paidLeavesPerMonth;
+  const adjustment = leaveAdjustmentFor(empId, month).leave;
+  const used = paidLeaveUsedFor(empId, month);
+  const allowance = carried + earned + adjustment;
+  return {carried, earned, adjustment, used, allowance, balance: allowance - used};
+}
+function wfhBalanceFor(empId, month){
+  const earned = hrPolicy.paidWfhPerMonth;
+  const adjustment = leaveAdjustmentFor(empId, month).wfh;
+  const used = monthlyAttendanceCounts(empId, month).wfh;
+  const allowance = earned + adjustment;
+  return {earned, adjustment, used, allowance, balance: allowance - used};
+}
+const paidLeaveAllowance = (empId, month)=>leaveBalanceFor(empId, month).allowance;
+const paidWfhAllowance = (empId, month)=>wfhBalanceFor(empId, month).allowance;
+
 // Projects the payroll impact of a leave request BEFORE it's even submitted — splits the requested
 // date range by calendar month (a request can straddle month-end) and, for each month touched, adds
 // the requested days on top of what's already recorded there (monthlyAttendanceCounts) to see how many
@@ -644,7 +681,6 @@ function monthlyAttendanceCounts(empId, month){
 // Loss of Pay consequence before they submit, not after HR approves it.
 function leaveImpactPreview(empId, from, to, kind){
   kind = kind==="wfh" ? "wfh" : "leave";
-  const cap = kind==="wfh" ? hrPolicy.paidWfhPerMonth : hrPolicy.paidLeavesPerMonth;
   if(!from || !to || to<from) return [];
   // Count only days NOT already marked with this same status — re-requesting a day that's already
   // recorded (e.g. a date within an earlier approved request) would otherwise be double-counted: once
@@ -660,6 +696,7 @@ function leaveImpactPreview(empId, from, to, kind){
   }
   return Object.entries(newDaysByMonth).map(([month, daysRequested])=>{
     const alreadyUsed = monthlyAttendanceCounts(empId, month)[kind];
+    const cap = kind=="wfh" ? paidWfhAllowance(empId, month) : paidLeaveAllowance(empId, month);
     const excess = Math.max(0, (alreadyUsed + daysRequested) - cap);
     return {month, daysRequested, alreadyUsed, excess};
   });
@@ -668,6 +705,8 @@ function leaveImpactPreview(empId, from, to, kind){
 // ---- HR master settings — holidays, leave entitlements and other general policy, all HRM-editable ----
 let hrPolicy = {
   paidLeavesPerMonth: 1, // company-wide cap: this many paid leave days per employee per month
+  leaveCarryStart: "2026-10", // unused paid leave carries forward from this month on (earlier months are left as they were)
+  leaveAdjustments: {},  // {"EMP-id|YYYY-MM": {leave, wfh}} — HR's manual balance corrections
   paidWfhPerMonth: 1,    // ...and this many paid Work From Home days per employee per month
   weeklyOff: 0, // day-of-week index (0=Sunday) — the one recurring non-working day, on top of marked holidays
   notes: "",
@@ -733,15 +772,58 @@ function calendarEventsForMonth(monthStr){
 function lopDaysFor(empId, month){
   const counts = monthlyAttendanceCounts(empId, month);
   // Unapproved absence is a full LOP day and a half day is half a LOP day; neither uses up the paid-leave allowance.
-  return Math.max(0, counts.leave - hrPolicy.paidLeavesPerMonth) + counts.absent + counts.unpaid + counts.half*0.5;
+  return Math.max(0, counts.leave - paidLeaveAllowance(empId, month)) + counts.absent + counts.unpaid + counts.half*0.5;
 }
 // WFH days beyond the monthly paid-WFH allowance: paid at 75% (a 25% cut) rather than a full LOP.
 function wfhExcessDaysFor(empId, month){
   const counts = monthlyAttendanceCounts(empId, month);
   // "Partially Paid WFH" days are always 75% — they never draw on the paid-WFH allowance.
-  return Math.max(0, counts.wfh - hrPolicy.paidWfhPerMonth) + counts.pwfh;
+  return Math.max(0, counts.wfh - paidWfhAllowance(empId, month)) + counts.pwfh;
 }
 let leaveRequests = [];
+// One place for the leave numbers shown to HR and to staff: requests still awaiting HR (pending), paid leave
+// used/left against hrPolicy.paidLeavesPerMonth, and unpaid days (leave beyond the allowance + "Unpaid Leave"-type days).
+// Which leave types an employee may still apply for in the month of `from`. Casual/Sick needs paid leave left
+// (approved days + pending requests both count); once it's gone only WFH / Partially Paid WFH / Unpaid Leave remain.
+// WFH needs paid WFH left — after that only Partially Paid WFH (75%) is offered.
+function leaveTypeAvailability(empId, from){
+  const month = (from || TODAY).slice(0,7);
+  const c = monthlyAttendanceCounts(empId, month);
+  const pending = (type)=>leaveRequests.filter(l=>l.empId===empId && l.status==="Pending" && l.type===type && (l.from||"").slice(0,7)===month).reduce((n,l)=>n+(Number(l.days)||0),0);
+  return {
+    casual: paidLeaveUsedFor(empId, month) + pending("Casual/Sick") < paidLeaveAllowance(empId, month),
+    wfh: c.wfh + pending("WFH") < paidWfhAllowance(empId, month),
+  };
+}
+// Greys out the unavailable types in a leave form's Type select and moves the choice to one that's allowed.
+function applyLeaveTypeLimits(selectEl, empId, from){
+  if(!selectEl || !empId) return;
+  const av = leaveTypeAvailability(empId, from);
+  [...selectEl.options].forEach(o=>{
+    if(!o.hasAttribute("value")) o.setAttribute("value", o.value); // keep the value when the label text changes below
+    const blocked = (o.value==="Casual/Sick" && !av.casual) || (o.value==="WFH" && !av.wfh);
+    o.disabled = blocked;
+    o.textContent = o.value + (o.value==="Casual/Sick" && blocked ? " — paid leave used up" : o.value==="WFH" && blocked ? " — paid WFH used up" : "");
+  });
+  if(selectEl.selectedOptions[0] && selectEl.selectedOptions[0].disabled){
+    const ok = [...selectEl.options].find(o=>!o.disabled);
+    if(ok) selectEl.value = ok.value;
+  }
+}
+function leaveSummaryFor(empId, month){
+  const c = monthlyAttendanceCounts(empId, month);
+  const pending = leaveRequests.filter(l=>l.empId===empId && l.status==="Pending" && (l.from||"").slice(0,7)===month);
+  const cap = paidLeaveAllowance(empId, month);
+  const used = paidLeaveUsedFor(empId, month);
+  return {
+    pendingRequests: pending.length,
+    pendingDays: pending.reduce((n,l)=>n+(Number(l.days)||0),0),
+    paidTaken: Math.min(used, cap),
+    paidLeft: Math.max(0, cap - used),
+    allowance: cap,
+    unpaidDays: Math.max(0, c.leave - cap) + c.unpaid,
+  };
+}
 
 // Advance Salary — money against THIS month's salary before it's earned. HR only decides Pending vs
 // Approved/Rejected; once Approved, it's Finance's call in Accounts > Payment Requests whether to pay
@@ -2552,24 +2634,28 @@ function workspaceLeave(){
   const mine = leaveRequests.filter(l=>l.empId===currentUser.id).slice().sort((a,b)=>{ const order={Pending:0,Approved:1,Rejected:2}; if(order[a.status]!==order[b.status]) return order[a.status]-order[b.status]; return b.applied.localeCompare(a.applied); });
   const month = TODAY.slice(0,7);
   const counts = monthlyAttendanceCounts(currentUser.id, month);
-  const leaveLeft = Math.max(0, hrPolicy.paidLeavesPerMonth - counts.leave);
-  const wfhLeft = Math.max(0, hrPolicy.paidWfhPerMonth - counts.wfh);
+  const lb = leaveBalanceFor(currentUser.id, month), wb = wfhBalanceFor(currentUser.id, month);
+  const leaveLeft = Math.max(0, lb.balance);
+  const wfhLeft = Math.max(0, wb.balance);
   const lopDays = lopDaysFor(currentUser.id, month);
   const wfhExcessDays = wfhExcessDaysFor(currentUser.id, month);
+  const ls = leaveSummaryFor(currentUser.id, month);
   const hasImpact = lopDays>0 || wfhExcessDays>0;
   return `
   <div class="toolbar"><div></div><button class="btn primary" onclick="openApplyLeave()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Apply for leave</button></div>
   <div class="panel">
-    <div class="panel-head"><h3>This month's leave &amp; WFH</h3><div class="sub">${esc(MONTH_LABEL[month]||month)} · ${hrPolicy.paidLeavesPerMonth} paid leave day &amp; ${hrPolicy.paidWfhPerMonth} paid WFH day per month</div></div>
+    <div class="panel-head"><h3>This month's leave &amp; WFH</h3><div class="sub">${esc(MONTH_LABEL[month]||month)} · ${lb.allowance} paid leave day &amp; ${wb.allowance} paid WFH day per month</div></div>
     <div class="panel-body">
       <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidLeavesPerMonth}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid WFH left</div><div class="kpi-value mono ${wfhLeft<=0?'warn':''}">${wfhLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidWfhPerMonth}</span></div><div class="kpi-sub">${counts.wfh} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${lb.allowance}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid WFH left</div><div class="kpi-value mono ${wfhLeft<=0?'warn':''}">${wfhLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${wb.allowance}</span></div><div class="kpi-sub">${counts.wfh} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Pending requests</div><div class="kpi-value mono ${ls.pendingRequests?'warn':''}">${ls.pendingRequests}</div><div class="kpi-sub">${ls.pendingDays} day${ls.pendingDays===1?'':'s'} awaiting HR</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Unpaid leave days</div><div class="kpi-value mono ${ls.unpaidDays?'warn':''}">${ls.unpaidDays}</div><div class="kpi-sub">${ls.paidLeft<=0?'Paid leave used up — further leave is unpaid':'Leave beyond '+lb.allowance+'/month is unpaid'}</div></div>
       </div>
       ${hasImpact ? `
       <div class="banner" style="margin-top:12px;">
         <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
-        <div><b>This is already affecting your payroll.</b> ${lopDays>0?`${lopDays} leave day${lopDays===1?"":"s"} beyond your ${hrPolicy.paidLeavesPerMonth}/month allowance means a full Loss of Pay deduction for ${lopDays===1?"that day":"those days"}.`:""} ${wfhExcessDays>0?`${wfhExcessDays} WFH day${wfhExcessDays===1?"":"s"} beyond your ${hrPolicy.paidWfhPerMonth}/month allowance is paid at 75% instead of full pay.`:""} See exactly how much in My Payroll.</div>
+        <div><b>This is already affecting your payroll.</b> ${lopDays>0?`${lopDays} leave day${lopDays===1?"":"s"} beyond your ${lb.allowance}/month allowance means a full Loss of Pay deduction for ${lopDays===1?"that day":"those days"}.`:""} ${wfhExcessDays>0?`${wfhExcessDays} WFH day${wfhExcessDays===1?"":"s"} beyond your ${wb.allowance}/month allowance is paid at 75% instead of full pay.`:""} See exactly how much in My Payroll.</div>
       </div>` : `
       <div class="banner muted" style="margin-top:12px;">
         <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
@@ -2616,6 +2702,8 @@ function openApplyLeave(){
     let days = Math.max(1, Math.round((new Date(to)-new Date(from))/86400000)+1);
     if(from===to && duration==="Half Day") days = 0.5;
     if(from===to && duration==="Quarter Day") days = 0.25;
+    const av = leaveTypeAvailability(currentUser.id, from), chosen = f.get("type");
+    if((chosen==="Casual/Sick" && !av.casual) || (chosen==="WFH" && !av.wfh)){ toast("You've used your paid "+(chosen==="WFH"?"WFH":"leave")+" for this month — choose Partially Paid WFH or Unpaid Leave"); return; }
     leaveRequests.unshift({id:"LR-"+(400+leaveRequests.length+1), empId:currentUser.id, type:f.get("type"), duration:(from===to?duration:"Full Day"), from, to, days, reason:f.get("reason"), status:"Pending", applied:TODAY});
     toast("Leave request submitted"); closeModal(); render();
   });
@@ -2631,6 +2719,7 @@ function updateLeaveImpactNote(){
   const typeEl = document.getElementById('leave-type');
   const noteEl = document.getElementById('leave-impact-note');
   if(!fromEl || !toEl || !noteEl || !currentUser) return;
+  applyLeaveTypeLimits(typeEl, currentUser.id, fromEl.value);
   const from = fromEl.value, to = toEl.value;
   const duration = durationEl ? durationEl.value : 'Full Day';
   const isWfh = typeEl ? typeEl.value === 'WFH' : false;
@@ -2648,7 +2737,8 @@ function updateLeaveImpactNote(){
   }
   const impact = leaveImpactPreview(currentUser.id, from, to, isWfh ? 'wfh' : 'leave');
   const withExcess = impact.filter(m=>m.excess>0);
-  const cap = isWfh ? hrPolicy.paidWfhPerMonth : hrPolicy.paidLeavesPerMonth;
+  const capMonth = from.slice(0,7);
+  const cap = isWfh ? paidWfhAllowance(currentUser.id, capMonth) : paidLeaveAllowance(currentUser.id, capMonth);
   if(withExcess.length){
     noteEl.innerHTML = `<div class="banner" style="margin-top:2px;margin-bottom:10px;">
       <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
@@ -2668,10 +2758,12 @@ function workspaceAttendance(){
   const present = monthPresentDays[currentUser.id] ?? mtdWorkingDays;
   const month = TODAY.slice(0,7);
   const counts = monthlyAttendanceCounts(currentUser.id, month);
-  const leaveLeft = Math.max(0, hrPolicy.paidLeavesPerMonth - counts.leave);
-  const wfhLeft = Math.max(0, hrPolicy.paidWfhPerMonth - counts.wfh);
+  const lb = leaveBalanceFor(currentUser.id, month), wb = wfhBalanceFor(currentUser.id, month);
+  const leaveLeft = Math.max(0, lb.balance);
+  const wfhLeft = Math.max(0, wb.balance);
   const lopDays = lopDaysFor(currentUser.id, month);
   const wfhExcessDays = wfhExcessDaysFor(currentUser.id, month);
+  const ls = leaveSummaryFor(currentUser.id, month);
   const hasImpact = lopDays>0 || wfhExcessDays>0;
   return `
   <div class="kpi-grid cols-5">
@@ -2686,20 +2778,22 @@ function workspaceAttendance(){
     <div class="panel-body"><div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Attendance</div><div class="kpi-value mono">${present}<span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;"> / ${mtdWorkingDays} working days</span></div><div class="kpi-sub">${present>=mtdWorkingDays?'full attendance this month':(mtdWorkingDays-present)+' day(s) missed'}</div></div></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><h3>Leave &amp; WFH this month</h3><div class="sub">${esc(MONTH_LABEL[month]||month)} · ${hrPolicy.paidLeavesPerMonth} paid leave and ${hrPolicy.paidWfhPerMonth} paid WFH day per month</div></div>
+    <div class="panel-head"><h3>Leave &amp; WFH this month</h3><div class="sub">${esc(MONTH_LABEL[month]||month)} · ${lb.allowance} paid leave and ${wb.allowance} paid WFH day per month</div></div>
     <div class="panel-body">
       <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidLeavesPerMonth}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid WFH left</div><div class="kpi-value mono ${wfhLeft<=0?'warn':''}">${wfhLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${hrPolicy.paidWfhPerMonth}</span></div><div class="kpi-sub">${counts.wfh} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${lb.allowance}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid WFH left</div><div class="kpi-value mono ${wfhLeft<=0?'warn':''}">${wfhLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${wb.allowance}</span></div><div class="kpi-sub">${counts.wfh} taken so far this month</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Pending requests</div><div class="kpi-value mono ${ls.pendingRequests?'warn':''}">${ls.pendingRequests}</div><div class="kpi-sub">${ls.pendingDays} day${ls.pendingDays===1?'':'s'} awaiting HR</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Unpaid leave days</div><div class="kpi-value mono ${ls.unpaidDays?'warn':''}">${ls.unpaidDays}</div><div class="kpi-sub">${ls.paidLeft<=0?'Paid leave used up — further leave is unpaid':'Leave beyond '+lb.allowance+'/month is unpaid'}</div></div>
       </div>
       ${hasImpact ? `
       <div class="banner" style="margin-top:12px;">
         <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
-        <div><b>This will affect your payroll.</b> ${lopDays>0?`${lopDays} leave day${lopDays===1?"":"s"} beyond your ${hrPolicy.paidLeavesPerMonth}/month allowance means a full Loss of Pay deduction for ${lopDays===1?"that day":"those days"}.`:""} ${wfhExcessDays>0?`${wfhExcessDays} WFH day${wfhExcessDays===1?"":"s"} beyond your ${hrPolicy.paidWfhPerMonth}/month allowance will be paid at 75% instead of full pay.`:""} See exactly how much in My Payroll once this month is added.</div>
+        <div><b>This will affect your payroll.</b> ${lopDays>0?`${lopDays} leave day${lopDays===1?"":"s"} beyond your ${lb.allowance}/month allowance means a full Loss of Pay deduction for ${lopDays===1?"that day":"those days"}.`:""} ${wfhExcessDays>0?`${wfhExcessDays} WFH day${wfhExcessDays===1?"":"s"} beyond your ${wb.allowance}/month allowance will be paid at 75% instead of full pay.`:""} See exactly how much in My Payroll once this month is added.</div>
       </div>` : `
       <div class="banner muted" style="margin-top:12px;">
         <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
-        <div>No extra leave or WFH beyond your monthly allowance yet — take more than ${hrPolicy.paidLeavesPerMonth} leave day or ${hrPolicy.paidWfhPerMonth} WFH day this month and the extra days start affecting your pay.</div>
+        <div>No extra leave or WFH beyond your monthly allowance yet — take more than ${lb.allowance} leave day or ${wb.allowance} WFH day this month and the extra days start affecting your pay.</div>
       </div>`}
     </div>
   </div>`;
@@ -3189,8 +3283,8 @@ function hrLeave(){
   </div>
   <div class="panel">
     <div class="panel-head"><h3>Leave &amp; WFH — ${esc(monthLabel(summaryMonth))}</h3><div class="sub">${hrPolicy.paidLeavesPerMonth} paid leave day &amp; ${hrPolicy.paidWfhPerMonth} paid WFH day per employee per month — set in HR Settings</div></div>
-    <div class="table-wrap"><table class="data"><thead><tr><th>Employee</th><th class="num">Leave taken</th><th class="num">LOP days</th><th class="num">WFH taken</th><th class="num">WFH pay-cut days</th></tr></thead>
-      <tbody>${employees.map(e=>{ const c=monthlyAttendanceCounts(e.id,summaryMonth); const lop=lopDaysFor(e.id,summaryMonth); const wfhCut=wfhExcessDaysFor(e.id,summaryMonth); return `<tr><td>${personCell(e)}</td><td class="num">${c.leave}</td><td class="num ${lop>0?'neg':''}">${lop||'—'}</td><td class="num">${c.wfh}</td><td class="num ${wfhCut>0?'neg':''}">${wfhCut||'—'}</td></tr>`; }).join("")}</tbody>
+    <div class="table-wrap"><table class="data"><thead><tr><th>Employee</th><th class="num">Pending requests</th><th class="num">Paid leave taken</th><th class="num">Paid leave left</th><th class="num">Unpaid leave days</th><th class="num">LOP days</th><th class="num">WFH taken</th><th class="num">WFH pay-cut days</th><th></th></tr></thead>
+      <tbody>${employees.map(e=>{ const c=monthlyAttendanceCounts(e.id,summaryMonth); const ls=leaveSummaryFor(e.id,summaryMonth); const lop=lopDaysFor(e.id,summaryMonth); const wfhCut=wfhExcessDaysFor(e.id,summaryMonth); return `<tr><td>${personCell(e)}</td><td class="num ${ls.pendingRequests?'warn':''}">${ls.pendingRequests?`${ls.pendingRequests} (${ls.pendingDays}d)`:'—'}</td><td class="num">${ls.paidTaken} / ${ls.allowance}</td><td class="num">${ls.paidLeft}</td><td class="num ${ls.unpaidDays>0?'neg':''}">${ls.unpaidDays||'—'}</td><td class="num ${lop>0?'neg':''}">${lop||'—'}</td><td class="num">${c.wfh}</td><td class="num ${wfhCut>0?'neg':''}">${wfhCut||'—'}</td><td class="num"><button class="btn btn-sm" onclick="openLeaveBalance('${e.id}','${summaryMonth}')">Balance</button></td></tr>`; }).join("")}</tbody>
     </table></div>
   </div>`;
 }
@@ -3952,11 +4046,53 @@ function openEditEmployee(id){
     grantLogin("staff", e.id, String(f.get("email")||"").trim(), newPw);
   });
 }
+function refreshHrLeaveTypes(){
+  const form = document.getElementById("f-add-leave");
+  if(form) applyLeaveTypeLimits(form.elements.type, form.elements.empId.value, form.elements.from.value);
+}
+function openLeaveBalance(empId, month){
+  const e = byId(empId); if(!e) return;
+  const lb = leaveBalanceFor(empId, month), wb = wfhBalanceFor(empId, month);
+  const row = (label, val, extra)=>`<div class="calc-line"><span>${label}</span><span class="mono">${extra||val}</span></div>`;
+  const adjInput = (id, v)=>`<input class="field-input" id="${id}" type="number" step="0.25" value="${v}" style="width:90px;text-align:right;padding:4px 8px;">`;
+  const tone = b=>b<0?'color:var(--neg);':'';
+  showModal(`
+    <div class="modal-head"><h3>Leave balance — ${esc(e.name)}</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">
+        <div><label class="field-label">Month</label><input class="field-input" type="month" id="lb-month" value="${month}" onchange="if(this.value) openLeaveBalance('${empId}', this.value)"></div>
+        <button class="btn primary" onclick="saveLeaveBalance('${empId}','${month}')">Update Balances</button>
+      </div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);margin-top:14px;">
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave balance</div><div class="kpi-value mono" style="${tone(lb.balance)}">${lb.balance}</div><div class="kpi-sub">${lb.used} used of ${lb.allowance}</div></div>
+        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">WFH balance</div><div class="kpi-value mono" style="${tone(wb.balance)}">${wb.balance}</div><div class="kpi-sub">${wb.used} used of ${wb.allowance}</div></div>
+      </div>
+      <div class="field-label" style="margin-top:16px;">Paid leave</div>
+      ${row("Carried over from previous month", lb.carried)}
+      ${row("Earned this month", lb.earned)}
+      ${row("HR adjustment", "", adjInput("lb-adj-leave", lb.adjustment))}
+      ${row("Used (approved)", lb.used)}
+      <div class="field-label" style="margin-top:16px;">WFH</div>
+      ${row("Carried over", "", '<span class="faint">— (WFH never carries forward)</span>')}
+      ${row("Earned this month", wb.earned)}
+      ${row("HR adjustment", "", adjInput("lb-adj-wfh", wb.adjustment))}
+      ${row("Used (approved)", wb.used)}
+      <div class="subtext" style="margin-top:12px;">Unused paid leave carries into the next month; days taken beyond the balance are Unpaid Leave. A positive adjustment adds days, a negative one removes them.</div>
+    </div>`);
+}
+function saveLeaveBalance(empId, month){
+  const leave = Number(document.getElementById("lb-adj-leave").value) || 0;
+  const wfh = Number(document.getElementById("lb-adj-wfh").value) || 0;
+  hrPolicy.leaveAdjustments = hrPolicy.leaveAdjustments || {};
+  const key = empId+"|"+month;
+  if(leave || wfh) hrPolicy.leaveAdjustments[key] = {leave, wfh}; else delete hrPolicy.leaveAdjustments[key];
+  toast("Balances updated"); render(); openLeaveBalance(empId, month);
+}
 function openAddLeave(){
   showModal(`
     <div class="modal-head"><h3>New leave request</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
     <form id="f-add-leave"><div class="modal-body">
-      <div><label class="field-label">Employee</label><select class="field-input" name="empId">${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
+      <div><label class="field-label">Employee</label><select class="field-input" name="empId" onchange="refreshHrLeaveTypes()">${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
       <div class="field-row">
         <div><label class="field-label">Type</label><select class="field-input" name="type"><option>Casual/Sick</option><option>WFH</option><option>Partially Paid WFH (75% payout)</option><option>Unpaid Leave</option></select></div>
         <div><label class="field-label">Duration</label><select class="field-input" name="duration"><option value="Full Day">Full Day</option><option value="Half Day">Half Day</option><option value="Quarter Day">Quarter Day</option></select></div>
@@ -3970,7 +4106,10 @@ function openAddLeave(){
     </div>
     <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn primary">Submit request</button></div></div>
     </form>`);
-  document.getElementById("f-add-leave").addEventListener("submit", e=>{
+  const hrForm = document.getElementById("f-add-leave");
+  hrForm.elements.from.addEventListener("change", refreshHrLeaveTypes);
+  refreshHrLeaveTypes();
+  hrForm.addEventListener("submit", e=>{
     e.preventDefault();
     const f = new FormData(e.target);
     const from=f.get("from"), to=f.get("to");
@@ -3978,6 +4117,8 @@ function openAddLeave(){
     let days = Math.max(1, Math.round((new Date(to)-new Date(from))/86400000)+1);
     if(from===to && duration==="Half Day") days = 0.5;
     if(from===to && duration==="Quarter Day") days = 0.25;
+    const av = leaveTypeAvailability(f.get("empId"), from), chosen = f.get("type");
+    if((chosen==="Casual/Sick" && !av.casual) || (chosen==="WFH" && !av.wfh)){ toast("Paid "+(chosen==="WFH"?"WFH":"leave")+" is used up for this employee this month — choose Partially Paid WFH or Unpaid Leave"); return; }
     leaveRequests.unshift({id:"LR-"+(400+leaveRequests.length+1), empId:f.get("empId"), type:f.get("type"), duration:(from===to?duration:"Full Day"), from, to, days, reason:f.get("reason"), status:"Pending", applied:TODAY});
     toast("Leave request submitted"); closeModal(); render();
   });
@@ -4163,11 +4304,14 @@ function decideLeave(id,decision){
   const l = leaveRequests.find(x=>x.id===id);
   l.status = decision;
   if(decision==="Approved" && (!l.duration || l.duration==="Full Day")){
-    const status = {"WFH":"wfh","Partially Paid WFH (75% payout)":"pwfh","Unpaid Leave":"unpaid"}[l.type] || "leave";
+    const baseStatus = {"WFH":"wfh","Partially Paid WFH (75% payout)":"pwfh","Unpaid Leave":"unpaid"}[l.type] || "leave";
     let d = new Date(l.from+"T00:00:00");
     const end = new Date(l.to+"T00:00:00");
     while(d<=end){
       const ds = d.toISOString().slice(0,10);
+      // Casual/Sick uses the month's paid allowance first; every day past it is recorded as Unpaid Leave.
+      let status = baseStatus;
+      if(baseStatus==="leave" && dayAttendanceStatus(l.empId, ds)!=="leave" && monthlyAttendanceCounts(l.empId, ds.slice(0,7)).leave >= paidLeaveAllowance(l.empId, ds.slice(0,7))) status = "unpaid";
       attendanceRecordFor(ds)[l.empId] = {status, in:null};
       d.setDate(d.getDate()+1);
     }
