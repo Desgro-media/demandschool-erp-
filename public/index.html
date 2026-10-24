@@ -3164,10 +3164,37 @@ function confirmDeparture(id){
   e.employmentStatus = "Left";
   toast(e.name+" archived"); closeModal(); render();
 }
+// Immediate termination: same "Left" status as a confirmed departure, which the server treats as access revoked
+// (sign-in blocked, any open session rejected on its next request). Reinstate from the archive restores access.
+function openTerminateEmployee(id){
+  const e = byId(id); if(!e) return;
+  const blocked = (currentUser && currentUser.id===id) ? "You can't terminate your own account."
+    : (isLeadershipRole(e) && !isLeadershipRole(currentUser)) ? "Only leadership can terminate a leadership account." : "";
+  showModal(`
+    <div class="modal-head"><h3>Terminate employee</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body">
+      <div class="person" style="margin-bottom:4px;">${personCell(e)}</div>
+      ${blocked ? `<div class="banner"><div>${esc(blocked)}</div></div>` : `<div class="banner"><svg class="icon" style="width:15px;height:15px"><use href="#i-bell"/></svg><div><b>Access is removed immediately.</b> ${esc(e.name)} is signed out of the ERP and can no longer log in. Their history is kept and they move to the archive; you can reinstate them from there.</div></div>
+      <div><label class="field-label">Last working day</label><input class="field-input" type="date" id="terminate-date" value="${TODAY}"></div>
+      <div><label class="field-label">Reason (optional)</label><input class="field-input" id="terminate-reason" placeholder="e.g. Policy violation, end of contract"></div>`}
+    </div>
+    <div class="modal-foot"><button type="button" class="btn ghost" onclick="openEmployeeDetail('${e.id}')">Back</button>${blocked?"":`<button type="button" class="btn danger" onclick="confirmTerminate('${e.id}')">Terminate & remove access</button>`}</div>`);
+}
+function confirmTerminate(id){
+  const e = byId(id); if(!e) return;
+  const date = document.getElementById('terminate-date');
+  const reason = document.getElementById('terminate-reason');
+  e.leavingDate = (date && date.value) || TODAY;
+  e.employmentStatus = "Left";
+  e.terminated = true;
+  e.terminationReason = ((reason && reason.value) || "").trim();
+  delete e.noticeGivenDate; delete e.noticeNote;
+  toast(e.name+" terminated — ERP access removed"); closeModal(); render();
+}
 function reinstateEmployee(id){
   const e = byId(id);
   e.employmentStatus = "Active";
-  delete e.leavingDate; delete e.noticeGivenDate; delete e.noticeNote;
+  delete e.leavingDate; delete e.noticeGivenDate; delete e.noticeNote; delete e.terminated; delete e.terminationReason;
   toast(e.name+" reinstated"); render(); openEmployeeArchive();
 }
 
@@ -3938,6 +3965,7 @@ function openEmployeeDetail(id){
       <div style="display:flex;gap:8px;">
         ${e.employmentStatus==="Active" ? `<button class="btn btn-sm ghost" onclick="openMarkNoticePeriod('${e.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-bell"/></svg>Mark notice period</button>` : ""}
         ${e.employmentStatus==="Notice Period" ? `<button class="btn btn-sm ghost" onclick="cancelNoticePeriod('${e.id}')">Cancel notice period</button><button class="btn btn-sm danger" onclick="openConfirmDeparture('${e.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-archive"/></svg>Confirm departure</button>` : ""}
+        ${e.employmentStatus!=="Left" ? `<button class="btn btn-sm danger" onclick="openTerminateEmployee('${e.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-x"/></svg>Terminate</button>` : ""}
         ${e.employmentStatus==="Left" ? `<button class="btn btn-sm ghost" onclick="reinstateEmployee('${e.id}')">Reinstate</button>` : ""}
       </div>
       <div style="display:flex;gap:8px;"><button class="btn ghost" onclick="closeModal()">Close</button><button class="btn primary" onclick="openEditEmployee('${e.id}')"><svg class="icon" style="width:13px;height:13px"><use href="#i-edit"/></svg>Edit details</button></div>
