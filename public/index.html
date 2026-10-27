@@ -7723,13 +7723,17 @@ async function rebaseConflicts(keys){
 // no dialog open and nobody typing (replacing records under an open edit form would orphan what it edits).
 let pulling = false;
 async function pullUpdates(){
-  if(!syncEnabled || syncBusy || pulling) return;
+  if(!syncEnabled || syncBusy || pulling || document.hidden) return;
   const ov = document.getElementById('overlay'), a = document.activeElement;
   if((ov && !ov.hidden) || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
   if(syncWritable.some(k=>SYNC_KEYS[k] && JSON.stringify(SYNC_KEYS[k]()) !== syncSnap[k])) return;
   pulling = true;
   try{
-    const { state } = await api('state');
+    // Ask for versions only; download full data just for collections that changed (saves bandwidth).
+    const { versions } = await api('state?versions=1');
+    const stale = Object.keys(versions).filter(k => SYNC_KEYS[k] && versions[k] !== syncVersions[k]);
+    if(!stale.length || syncBusy) return;
+    const { state } = await api('state?keys='+stale.join(','));
     if(syncBusy) return;
     let changed = false;
     for(const k of Object.keys(state)){

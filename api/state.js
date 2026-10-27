@@ -10,12 +10,22 @@ export default route(['GET', 'PUT'], async (req, res) => {
   const { user, who } = await requireWho(req);
 
   if (req.method === 'GET') {
-    const keys = ALL_KEYS.filter(k => canRead(who, k));
-    const rows = await store.getState(keys);
+    const readable = ALL_KEYS.filter(k => canRead(who, k));
+    const q = new URL(req.url, 'http://x').searchParams;
+    // Cheap change check used by the browser's background refresh: versions only, no data.
+    if (q.get('versions')) {
+      const versions = {};
+      for (const r of await store.getVersions(readable)) versions[r.key] = r.version;
+      return send(res, 200, { versions });
+    }
+    // Optional ?keys=a,b limits the download to the collections that actually changed.
+    const wanted = q.get('keys') ? new Set(q.get('keys').split(',')) : null;
+    const keys = wanted ? readable.filter(k => wanted.has(k)) : readable;
+    const rows = await store.getState(who.access === 'student' && wanted ? [...new Set([...keys, 'students'])] : keys);
     const ctx = {};
     if (who.access === 'student') ctx.courses = studentCourses(who, (rows.find(r => r.key === 'students') || {}).value);
     const state = {};
-    for (const r of rows) state[r.key] = { version: r.version, value: readView(who, r.key, r.value, ctx) };
+    for (const r of rows) if (keys.includes(r.key)) state[r.key] = { version: r.version, value: readView(who, r.key, r.value, ctx) };
     return send(res, 200, { state });
   }
 
