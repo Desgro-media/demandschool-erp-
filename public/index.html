@@ -218,6 +218,31 @@
   .bar-fill{height:100%;background:var(--brand);border-radius:5px;}
   .bar-val{font-size:12px;font-family:"IBM Plex Mono",monospace;color:var(--ink-soft);text-align:right;}
 
+  /* Marketing score card (Content page) */
+  .mscore{margin-bottom:16px;}
+  .mscore-body{display:grid;grid-template-columns:150px 1fr;gap:28px;align-items:center;padding:20px 22px;}
+  .mscore-ring{position:relative;width:120px;height:120px;margin:0 auto;}
+  .mscore-ring svg{width:120px;height:120px;transform:rotate(-90deg);}
+  .mscore-ring .track{stroke:var(--surface-sunk);}
+  .mscore-ring .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:"IBM Plex Mono",monospace;}
+  .mscore-ring .val b{font-size:34px;line-height:1;}
+  .mscore-ring .val span{font-size:11px;color:var(--ink-faint);margin-top:3px;}
+  .mscore-prev{text-align:center;font-size:12px;color:var(--ink-soft);margin-top:8px;}
+  .mscore-rows{display:flex;flex-direction:column;gap:16px;min-width:0;}
+  .mscore-row{display:grid;grid-template-columns:minmax(120px,190px) 1fr 110px;gap:16px;align-items:center;}
+  .mscore-row.na .mscore-name{color:var(--ink-faint);}
+  .mscore-name{font-weight:700;font-size:13.5px;}
+  .mscore-sub{font-size:11.5px;color:var(--ink-faint);font-weight:500;margin-top:2px;}
+  .mscore-pts{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:700;font-size:13.5px;}
+  .mscore-pts small{display:block;font-weight:500;font-size:11px;color:var(--ink-faint);margin-top:2px;font-family:inherit;}
+  .mscore-row .bar-track{height:10px;}
+  .bar-fill.pos{background:var(--pos);} .bar-fill.warn{background:var(--warn);} .bar-fill.neg{background:var(--neg);}
+  @media (max-width:760px){
+    .mscore-body{grid-template-columns:1fr;gap:18px;}
+    .mscore-row{grid-template-columns:1fr auto;gap:6px 12px;}
+    .mscore-row .bar-track{grid-column:1 / -1;order:3;}
+  }
+
   .feed-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
   .feed-item:last-child{border-bottom:none;padding-bottom:0;}
   .feed-dot{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:none;background:var(--brand);}
@@ -1416,6 +1441,8 @@ function contentTeam(extra){
 
 let contentItems = [];
 let contentNextId = 100;
+// Monthly numbers entered by hand for the Marketing Score: { 'YYYY-MM': { followers: total followers, engagement: average engagement % } }
+let marketingStats = {};
 let contentPlatformFilter = 'All';
 let contentDateFilter = 'All';   // All | Today | Week | Month — matched against each item's due (or publish) date
 
@@ -2129,8 +2156,7 @@ const MODULES = [
     {id:"overview", label:"Overview", icon:"i-trend"},
     {id:"tasks", label:"My Tasks", icon:"i-board", count:()=>currentUser?studentTasks.filter(t=>t.assignedTo===currentUser.name && t.status!=="Done").length:0},
     {id:"sessions", label:"Session Log", icon:"i-calendar", count:()=>currentUser&&currentUser.dept==='Academics'?myUnloggedSessions(currentUser).length:0},
-    {id:"attendance", label:"My Attendance", icon:"i-attendance"},
-    {id:"leave", label:"Leave", icon:"i-leave", count:()=>currentUser?leaveRequests.filter(l=>l.empId===currentUser.id && l.status==="Pending").length:0},
+    {id:"attendance", label:"Attendance & Leave", icon:"i-attendance", count:()=>currentUser?leaveRequests.filter(l=>l.empId===currentUser.id && l.status==="Pending").length:0},
     {id:"payroll", label:"My Payroll", icon:"i-wallet", count:()=>currentUser?advances.filter(a=>a.empId===currentUser.id && a.status==="Pending").length + withdrawalRequests.filter(w=>w.empId===currentUser.id && w.status==="Pending").length:0},
     {id:"payments", label:"Payment Requests", icon:"i-receipt", count:()=>currentUser?paymentRequests.filter(r=>r.empId===currentUser.id && r.status==="Pending").length:0},
     {id:"complaints", label:"Complaints", icon:"i-megaphone"},
@@ -2227,8 +2253,7 @@ function isStaffRole(emp){ return !!emp && (["staff","marketing","academics"].in
 // in for the default (Staff-flavored) workspace sub-array by visibleModules() below.
 const SALES_WORKSPACE_SUB = [
   {id:"overview", label:"Overview", icon:"i-trend"},
-  {id:"attendance", label:"My Attendance", icon:"i-attendance"},
-  {id:"leave", label:"Leave", icon:"i-leave", count:()=>currentUser?leaveRequests.filter(l=>l.empId===currentUser.id && l.status==="Pending").length:0},
+  {id:"attendance", label:"Attendance & Leave", icon:"i-attendance", count:()=>currentUser?leaveRequests.filter(l=>l.empId===currentUser.id && l.status==="Pending").length:0},
   {id:"payments", label:"Payment Requests", icon:"i-receipt", count:()=>currentUser?paymentRequests.filter(r=>r.empId===currentUser.id && r.status==="Pending").length:0},
   {id:"complaints", label:"Complaints", icon:"i-megaphone"},
   {id:"commission", label:"My Commission", icon:"i-percent", count:()=>currentUser?payables.filter(p=>p.category==="Commission" && p.salesPerson===currentUser.name && payableBalance(p)>0).length:0},
@@ -2309,8 +2334,7 @@ const TOPBAR_TITLES = {
     overview:["My Workspace", ()=>currentUser?currentUser.role+" · "+currentUser.name:"Your personal snapshot"],
     tasks:["My Tasks", ()=>currentUser?studentTasks.filter(t=>t.assignedTo===currentUser.name && t.status!=="Done").length+" open across your students":""],
     sessions:["Session Log", ()=>currentUser?myUnloggedSessions(currentUser).length+" session(s) awaiting a log":""],
-    attendance:["My Attendance","Your check-in status and this month's record"],
-    leave:["Leave", ()=>currentUser?leaveRequests.filter(l=>l.empId===currentUser.id).length+" request(s) on record":""],
+    attendance:["Attendance & Leave", ()=>currentUser?"Check-in, leave and WFH · "+leaveRequests.filter(l=>l.empId===currentUser.id).length+" request(s) on record":"Your check-in status and leave"],
     payroll:["My Payroll", ()=>currentUser && payroll.history[payroll.selectedMonth].entries[currentUser.id] ? MONTH_LABEL[payroll.selectedMonth]+" · "+computePayrollRow(currentUser,payroll.selectedMonth).payStatus : "Not added to a payroll cycle yet"],
     payments:["Payment Requests", ()=>currentUser?paymentRequests.filter(r=>r.empId===currentUser.id).length+" request(s) on record":""],
     complaints:["Complaints","Anonymous — nothing here is tied to your name"],
@@ -2404,13 +2428,17 @@ function render(){
   }
   renderTopbar();
   if(nav.module==="dashboard") root.innerHTML = viewDashboard();
-  else if(nav.module==="workspace") root.innerHTML = ({overview:workspaceOverview,tasks:workspaceTasks,sessions:workspaceSessions,attendance:workspaceAttendance,leave:workspaceLeave,payroll:workspacePayroll,payments:workspacePaymentRequests,complaints:workspaceComplaints,commission:workspaceCommission,leaderboard:workspaceLeaderboard})[nav.sub.workspace]();
+  else if(nav.module==="workspace") root.innerHTML = ({overview:workspaceOverview,tasks:workspaceTasks,sessions:workspaceSessions,attendance:workspaceAttendance,payroll:workspacePayroll,payments:workspacePaymentRequests,complaints:workspaceComplaints,commission:workspaceCommission,leaderboard:workspaceLeaderboard})[nav.sub.workspace]();
   else if(nav.module==="hr") root.innerHTML = ({overview:hrOverview,directory:hrDirectory,attendance:hrAttendance,leave:hrLeave,hiring:hrHiring,payroll:hrPayroll,advances:hrAdvances,withdrawals:hrWithdrawals,sessionlogs:hrSessionLogs,complaints:hrComplaints,notices:hrNotices,policies:hrPolicies})[nav.sub.hr]();
   else if(nav.module==="marketing") root.innerHTML = ({overview:mktOverview,content:mktContent,performance:mktPerformance})[nav.sub.marketing]();
   else if(nav.module==="students") root.innerHTML = ({overview:studentsOverview,all:studentsAll,courses:admissionsCourses,batches:admissionsBatches,planner:academicPlanner,materials:admissionsMaterials,assignments:admissionsAssignments,complaints:admissionsComplaints})[nav.sub.students]();
   else if(nav.module==="placements") root.innerHTML = ({overview:placementsOverview,partners:placementsPartners,positions:placementsPositions,students:placementsStudents,reviews:placementsReviews})[nav.sub.placements]();
   else if(nav.module==="accounts") root.innerHTML = ({overview:acctOverview,receipts:acctPaymentReceipts,requests:acctPaymentRequests,payroll:acctPayroll,payables:acctPayables,expenses:acctExpenses,banks:acctBanks,commissions:acctCommissions,coa:acctChartOfAccounts,journal:acctJournal,reports:acctReports})[nav.sub.accounts]();
   if(nav.module==="marketing" && nav.sub.marketing==="content") initContentBoard();
+  if(nav.module==="marketing" && nav.sub.marketing==="overview") renderMarketingScore();
+  if(nav.module==="hr" && nav.sub.hr==="overview") renderHRScore();
+  if(nav.module==="students" && nav.sub.students==="overview") renderAcademicsScore();
+  if(nav.module==="placements" && nav.sub.placements==="overview") renderPlacementsScore();
   if(nav.module==="workspace" && nav.sub.workspace==="tasks") renderMyTaskBoard();
 }
 
@@ -2644,40 +2672,10 @@ function workspaceSessions(){
   </div>
   `;
 }
-function workspaceLeave(){
-  if(!currentUser) return '';
+// The signed-in person's own leave/WFH requests — shown under My Attendance (Attendance & Leave).
+function myLeaveRequestsPanel(){
   const mine = leaveRequests.filter(l=>l.empId===currentUser.id).slice().sort((a,b)=>{ const order={Pending:0,Approved:1,Rejected:2}; if(order[a.status]!==order[b.status]) return order[a.status]-order[b.status]; return b.applied.localeCompare(a.applied); });
-  const month = TODAY.slice(0,7);
-  const counts = monthlyAttendanceCounts(currentUser.id, month);
-  const lb = leaveBalanceFor(currentUser.id, month), wb = wfhBalanceFor(currentUser.id, month);
-  const leaveLeft = Math.max(0, lb.balance);
-  const wfhLeft = Math.max(0, wb.balance);
-  const lopDays = lopDaysFor(currentUser.id, month);
-  const wfhExcessDays = wfhExcessDaysFor(currentUser.id, month);
-  const ls = leaveSummaryFor(currentUser.id, month);
-  const hasImpact = lopDays>0 || wfhExcessDays>0;
   return `
-  <div class="toolbar"><div></div><button class="btn primary" onclick="openApplyLeave()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Apply for leave</button></div>
-  <div class="panel">
-    <div class="panel-head"><h3>This month's leave &amp; WFH</h3><div class="sub">${esc(MONTH_LABEL[month]||month)} · ${lb.allowance} paid leave day &amp; ${wb.allowance} paid WFH day per month</div></div>
-    <div class="panel-body">
-      <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${lb.allowance}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid WFH left</div><div class="kpi-value mono ${wfhLeft<=0?'warn':''}">${wfhLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${wb.allowance}</span></div><div class="kpi-sub">${counts.wfh} taken so far this month</div></div>
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Pending requests</div><div class="kpi-value mono ${ls.pendingRequests?'warn':''}">${ls.pendingRequests}</div><div class="kpi-sub">${ls.pendingDays} day${ls.pendingDays===1?'':'s'} awaiting HR</div></div>
-        <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Unpaid leave days</div><div class="kpi-value mono ${ls.unpaidDays?'warn':''}">${ls.unpaidDays}</div><div class="kpi-sub">${ls.paidLeft<=0?'Paid leave used up — further leave is unpaid':'Leave beyond '+lb.allowance+'/month is unpaid'}</div></div>
-      </div>
-      ${hasImpact ? `
-      <div class="banner" style="margin-top:12px;">
-        <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
-        <div><b>This is already affecting your payroll.</b> ${lopDays>0?`${lopDays} leave day${lopDays===1?"":"s"} beyond your ${lb.allowance}/month allowance means a full Loss of Pay deduction for ${lopDays===1?"that day":"those days"}.`:""} ${wfhExcessDays>0?`${wfhExcessDays} WFH day${wfhExcessDays===1?"":"s"} beyond your ${wb.allowance}/month allowance is paid at 75% instead of full pay.`:""} See exactly how much in My Payroll.</div>
-      </div>` : `
-      <div class="banner muted" style="margin-top:12px;">
-        <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
-        <div>You're within your paid leave and WFH allowance for ${esc(MONTH_LABEL[month]||month)} — no pay impact yet.</div>
-      </div>`}
-    </div>
-  </div>
   <div class="panel">
     <div class="panel-head"><h3>Your requests</h3></div>
     <div class="table-wrap"><table class="data"><thead><tr><th>Type</th><th>Dates</th><th class="num">Days</th><th>Reason</th><th>Status</th></tr></thead>
@@ -2793,7 +2791,7 @@ function workspaceAttendance(){
     <div class="panel-body"><div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Attendance</div><div class="kpi-value mono">${present}<span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;"> / ${mtdWorkingDays} working days</span></div><div class="kpi-sub">${present>=mtdWorkingDays?'full attendance this month':(mtdWorkingDays-present)+' day(s) missed'}</div></div></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><h3>Leave &amp; WFH this month</h3><div class="sub">${esc(MONTH_LABEL[month]||month)} · ${lb.allowance} paid leave and ${wb.allowance} paid WFH day per month</div></div>
+    <div class="panel-head"><div><h3>Leave &amp; WFH this month</h3><div class="sub">${esc(MONTH_LABEL[month]||month)} · ${lb.allowance} paid leave and ${wb.allowance} paid WFH day per month</div></div><button class="btn primary" onclick="openApplyLeave()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Apply for leave</button></div>
     <div class="panel-body">
       <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);">
         <div class="kpi-card" style="box-shadow:none;"><div class="kpi-label">Paid leave left</div><div class="kpi-value mono ${leaveLeft<=0?'warn':''}">${leaveLeft} <span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;">/ ${lb.allowance}</span></div><div class="kpi-sub">${counts.leave} taken so far this month</div></div>
@@ -2811,7 +2809,8 @@ function workspaceAttendance(){
         <div>No extra leave or WFH beyond your monthly allowance yet — take more than ${lb.allowance} leave day or ${wb.allowance} WFH day this month and the extra days start affecting your pay.</div>
       </div>`}
     </div>
-  </div>`;
+  </div>
+  ${myLeaveRequestsPanel()}`;
 }
 // Advance Salary's request form — reached from the "Withdrawal" button in My Payroll
 // (openChooseWithdrawalType()) rather than its own nav tab; the "Your requests" list lives in
@@ -3061,6 +3060,7 @@ function hrOverview(){
     <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
     <div>Approving a leave or advance updates its status live; fully paying an employee's salary for the month recovers their approved advance automatically.</div>
   </div>
+  <div id="hr-score"></div>
   <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">Team Size</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-users"/></svg></div></div><div class="kpi-value mono">${active.length}</div><div class="kpi-sub">${onNotice ? onNotice+" on notice period" : "across "+DEPARTMENTS.length+" departments"}</div></div>
     <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">Present Today</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-check"/></svg></div></div><div class="kpi-value mono">${present+late+half}<span style="font-size:14px;color:var(--ink-soft);font-family:Manrope;"> / ${active.length}</span></div><div class="kpi-sub">${onLeave} on leave</div></div>
@@ -4461,6 +4461,7 @@ function mktOverview(){
     <svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg>
     <div><b>Internal marketing.</b> This module tracks Demand School's own brand content and ad campaigns — course enrollment, not student-specific work, which lives under Academics.</div>
   </div>
+  <div id="mkt-score"></div>
   <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">Content In Flight</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-board"/></svg></div></div><div class="kpi-value mono">${activeContent}</div><div class="kpi-sub">${overdueContent} overdue</div></div>
     <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">Published This Month</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-check"/></svg></div></div><div class="kpi-value mono">${publishedMTD}</div><div class="kpi-sub">our own channels</div></div>
@@ -4482,6 +4483,7 @@ function mktOverview(){
 function mktContent(){
   return `
   <div class="banner"><svg class="icon" style="width:15px;height:15px"><use href="#i-sliders"/></svg><div>Drag a card between columns, or use the stage dropdown on each card — both update the same record.</div></div>
+  <div id="mkt-score"></div>
   <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">Active Content</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-board"/></svg></div></div><div class="kpi-value mono" id="kpi-active">0</div><div class="kpi-sub">not yet published</div></div>
     <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">In Production</span><div class="kpi-badge"><svg class="icon" style="width:15px;height:15px"><use href="#i-edit"/></svg></div></div><div class="kpi-value mono" id="kpi-production">0</div><div class="kpi-sub">scripting, production + editing</div></div>
@@ -4560,7 +4562,7 @@ function renderContentKPIs(){
   const active = contentItems.filter(i=>i.stage!=='Published').length;
   const production = contentItems.filter(i=>i.stage==='Scripting'||i.stage==='Production'||i.stage==='Editing').length;
   const thisMonth = TODAY.slice(0,7);
-  const published = contentItems.filter(i=>i.stage==='Published' && i.due && i.due.slice(0,7)<=thisMonth).length;
+  const published = contentItems.filter(i=>i.stage==='Published' && i.due && i.due.slice(0,7)===thisMonth).length;
   const overdue = contentItems.filter(isContentOverdue).length;
   document.getElementById('kpi-active').textContent = active;
   document.getElementById('kpi-production').textContent = production;
@@ -4568,6 +4570,246 @@ function renderContentKPIs(){
   const overdueEl = document.getElementById('kpi-overdue');
   overdueEl.textContent = overdue;
   overdueEl.classList.toggle('warn', overdue>0);
+  renderMarketingScore();
+}
+
+/* ---- Marketing Score: content delivered (50) + follower growth (25) + engagement rate (25) ----
+   Items without numbers show n/a and are left out, so the score is "points earned of points available". */
+const MKT_SCORE = { content:50, followers:25, engagement:25, followerGrowthTarget:5, engagementTarget:5 };   // targets: +5% followers a month, 5% engagement
+const clamp01 = v => Math.max(0, Math.min(1, v));
+function monthShift(ym, delta){ const [y,m] = ym.split('-').map(Number), d = new Date(y, m-1+delta, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function monthName(ym){ return new Date(ym+'-01T00:00:00').toLocaleString('en-IN',{month:'long'}); }
+function mscoreTone(frac){ return frac>=0.75 ? 'pos' : frac>=0.5 ? 'warn' : 'neg'; }
+function marketingScoreFor(ym){
+  const st = marketingStats[ym] || {}, prevSt = marketingStats[monthShift(ym,-1)] || {};
+  const num = v => (v!=='' && v!=null && isFinite(Number(v))) ? Number(v) : null;
+  const rows = [];
+  // Content delivered: of the items due so far this month, how many are published
+  const due = contentItems.filter(i=>i.due && i.due.slice(0,7)===ym && i.due<=TODAY);
+  const done = due.filter(i=>i.stage==='Published').length;
+  rows.push({ key:'content', label:'Content delivered', max:MKT_SCORE.content,
+    pts: due.length ? MKT_SCORE.content*done/due.length : null,
+    sub: due.length ? `${done} of ${due.length} due so far published` : 'nothing due yet' });
+  // Follower growth: this month's follower total vs last month's
+  const f = num(st.followers), pf = num(prevSt.followers);
+  const growth = (f!=null && pf!=null && pf>0) ? (f-pf)/pf*100 : null;
+  rows.push({ key:'followers', label:'Follower growth', max:MKT_SCORE.followers,
+    pts: growth!=null ? MKT_SCORE.followers*clamp01(growth/MKT_SCORE.followerGrowthTarget) : null,
+    sub: growth!=null ? `${growth>=0?'+':''}${growth.toFixed(1)}% · ${f.toLocaleString('en-IN')} followers` : 'no numbers to compare' });
+  // Engagement rate: average engagement % entered for the month
+  const e = num(st.engagement);
+  rows.push({ key:'engagement', label:'Engagement rate', max:MKT_SCORE.engagement,
+    pts: e!=null ? MKT_SCORE.engagement*clamp01(e/MKT_SCORE.engagementTarget) : null,
+    sub: e!=null ? `${e}% average engagement` : 'no numbers yet' });
+  return { rows, total: scoreTotal(rows) };
+}
+function canEditMarketingStats(){ return !syncEnabled || syncWritable.includes('marketingStats'); }
+// Shared by the Marketing Score (Content / Marketing Overview) and the People Score (HR Overview).
+// rows: [{label, sub, pts, max}] — pts is null when there is nothing to score yet (shown as n/a).
+function scoreTotal(rows){
+  const avail = rows.filter(r=>r.pts!=null);
+  return avail.length ? Math.round(avail.reduce((a,r)=>a+r.pts,0) / avail.reduce((a,r)=>a+r.max,0) * 100) : null;
+}
+function scoreCardHTML({title, sub, cur, prev, prevName, action}){
+  const total = cur.total;
+  const tone = total==null ? 'neutral' : mscoreTone(total/100);
+  const label = total==null ? 'No data yet' : total<50 ? 'Needs work' : total<75 ? 'Fair' : 'On track';
+  const C = 2*Math.PI*52, off = C*(1-(total||0)/100);
+  const stroke = tone==='neutral' ? 'line' : tone;
+  return `
+  <div class="panel mscore">
+    <div class="panel-head">
+      <div><h3>${title}</h3><div class="sub">${sub}</div></div>
+      <div style="display:flex;gap:8px;align-items:center;">${action||''}${pill(label, tone)}</div>
+    </div>
+    <div class="mscore-body">
+      <div>
+        <div class="mscore-ring">
+          <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/><circle cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke="var(--${stroke})" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg>
+          <div class="val"><b>${total==null?'—':total}</b><span>/ 100</span></div>
+        </div>
+        <div class="mscore-prev">${prevName}: ${prev.total==null?'no data':prev.total}</div>
+      </div>
+      <div class="mscore-rows">
+        ${cur.rows.map((r,i)=>{
+          const p = prev.rows[i];
+          const frac = r.pts==null ? 0 : r.pts/r.max;
+          return `<div class="mscore-row ${r.pts==null?'na':''}">
+            <div><div class="mscore-name">${r.label}</div><div class="mscore-sub">${esc(r.sub)}</div></div>
+            <div class="bar-track"><div class="bar-fill ${r.pts==null?'':mscoreTone(frac)}" style="width:${(frac*100).toFixed(1)}%"></div></div>
+            <div class="mscore-pts">${r.pts==null?'n/a':Math.round(r.pts)+'/'+r.max}<small>${prevName}: ${p.pts==null?'n/a':Math.round(p.pts)+'/'+p.max}</small></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+function renderMarketingScore(){
+  const host = document.getElementById('mkt-score');
+  if(!host) return;
+  const ym = TODAY.slice(0,7), prevYm = monthShift(ym,-1);
+  host.innerHTML = scoreCardHTML({
+    title:`Marketing Score · ${monthName(ym)} ${ym.slice(0,4)}`, sub:`Content, followers and engagement · vs ${monthName(prevYm)}`,
+    cur:marketingScoreFor(ym), prev:marketingScoreFor(prevYm), prevName:monthName(prevYm),
+    action: canEditMarketingStats()?`<button class="btn btn-sm ghost" onclick="openMarketingStatsModal()"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Update numbers</button>`:''
+  });
+}
+
+/* ---- People Score (HR Overview): team attendance (40) + requests handled (30) + salary settled (30) ----
+   Same rule as the Marketing Score: a part with nothing to score shows n/a and is left out of the total. */
+const HR_SCORE = { attendance:40, requests:30, salary:30, attendanceTarget:0.95 };   // 95% team attendance earns full points
+function hrScoreFor(ym){
+  const rows = [];
+  // Team attendance: working days so far this month (the whole month once it is over), every active employee.
+  // Present/late/WFH count fully, partly-paid WFH 75%, half day 50%, absent/unpaid 0; approved leave is not an absence.
+  const [y,m] = ym.split('-').map(Number);
+  const lastDay = daysInCalendarMonth(y,m);
+  const weight = {present:1, late:1, wfh:1, pwfh:0.75, half:0.5, absent:0, unpaid:0};
+  let good = 0, counted = 0;
+  for(let d=1; d<=lastDay; d++){
+    const ds = `${ym}-${String(d).padStart(2,'0')}`;
+    if(ds>TODAY || new Date(y,m-1,d).getDay()===hrPolicy.weeklyOff || isHolidayDate(ds)) continue;
+    activeEmployees().forEach(e=>{
+      const st = dayAttendanceStatus(e.id, ds);
+      if(st==='leave' || !(st in weight)) return;
+      good += weight[st]; counted++;
+    });
+  }
+  const rate = counted ? good/counted : null;
+  rows.push({ label:'Team attendance', max:HR_SCORE.attendance,
+    pts: rate!=null ? HR_SCORE.attendance*clamp01(rate/HR_SCORE.attendanceTarget) : null,
+    sub: rate!=null ? `${Math.round(rate*100)}% of working days · target ${Math.round(HR_SCORE.attendanceTarget*100)}%` : 'no working days yet' });
+  // Requests handled: leave, advance and withdrawal requests raised this month that HR has already decided.
+  const raised = [...leaveRequests.map(r=>({d:r.applied, s:r.status})), ...advances.map(r=>({d:r.requested, s:r.status})), ...withdrawalRequests.map(r=>({d:r.requested, s:r.status}))]
+    .filter(r=>r.d && r.d.slice(0,7)===ym);
+  const handled = raised.filter(r=>r.s!=='Pending').length;
+  rows.push({ label:'Requests handled', max:HR_SCORE.requests,
+    pts: raised.length ? HR_SCORE.requests*handled/raised.length : null,
+    sub: raised.length ? `${handled} of ${raised.length} requests decided` : 'no requests this month' });
+  // Salary settled: a month's salary is paid on the 5th of the next month, so this month's score looks at last month's payroll.
+  const pm = monthShift(ym,-1), entries = (payroll.history[pm] && payroll.history[pm].entries) || {};
+  let net = 0, paid = 0;
+  Object.keys(entries).forEach(id=>{ const e = byId(id); const r = e && computePayrollRow(e, pm); if(r){ net += r.net; paid += Math.min(r.paid, r.net); } });
+  rows.push({ label:'Salary settled', max:HR_SCORE.salary,
+    pts: net>0 ? HR_SCORE.salary*clamp01(paid/net) : null,
+    sub: net>0 ? `${monthName(pm)} salary · ${inr(paid)} of ${inr(net)} paid` : `no ${monthName(pm)} payroll yet` });
+  return { rows, total: scoreTotal(rows) };
+}
+function renderHRScore(){
+  const host = document.getElementById('hr-score');
+  if(!host) return;
+  const ym = TODAY.slice(0,7), prevYm = monthShift(ym,-1);
+  host.innerHTML = scoreCardHTML({
+    title:`People Score · ${monthName(ym)} ${ym.slice(0,4)}`, sub:`Attendance, requests and salary · vs ${monthName(prevYm)}`,
+    cur:hrScoreFor(ym), prev:hrScoreFor(prevYm), prevName:monthName(prevYm)
+  });
+}
+/* ---- Academics Score (Academics Overview): classes delivered (40) + follow-ups done (30) + assignments graded (30) ---- */
+const ACAD_SCORE = { classes:40, followups:30, grading:30 };
+function academicsScoreFor(ym){
+  const rows = [];
+  // Classes delivered: planned class days this month up to today (cancelled/postponed ones are not held against anyone)
+  // that faculty have logged as taken.
+  let planned = 0, delivered = 0;
+  batches.forEach(b=>academicCalendarProgress(b).forEach(sess=>{
+    if(!sess.date || sess.date.slice(0,7)!==ym || sess.date>TODAY) return;
+    const st = academicStatusOf(sess);
+    if(st==='Cancelled' || st==='Postponed') return;
+    planned++; if(st==='Completed') delivered++;
+  }));
+  rows.push({ label:'Classes delivered', max:ACAD_SCORE.classes,
+    pts: planned ? ACAD_SCORE.classes*delivered/planned : null,
+    sub: planned ? `${delivered} of ${planned} planned classes taken` : 'no classes planned yet' });
+  // Follow-ups done: student follow-ups that fell due this month (up to today) and are marked Done.
+  const salesView = !!(currentUser && isSalesRole(currentUser)), mine = new Set(visibleStudents().map(c=>c.id));
+  const tasks = (salesView ? studentTasks.filter(t=>mine.has(t.studentId)) : studentTasks).filter(t=>t.due && t.due.slice(0,7)===ym && t.due<=TODAY);
+  const tasksDone = tasks.filter(t=>t.status==='Done').length;
+  rows.push({ label:'Follow-ups done', max:ACAD_SCORE.followups,
+    pts: tasks.length ? ACAD_SCORE.followups*tasksDone/tasks.length : null,
+    sub: tasks.length ? `${tasksDone} of ${tasks.length} follow-ups due are done` : 'nothing due yet' });
+  // Assignments graded: work students submitted for assignments due this month that has been graded.
+  const dueAsg = assignments.filter(a=>a.dueDate && a.dueDate.slice(0,7)===ym && a.dueDate<=TODAY);
+  const subs = dueAsg.flatMap(a=>submissionsOfAssignment(a.id)).filter(x=>x.status==='Submitted' || x.status==='Graded');
+  const graded = subs.filter(x=>x.status==='Graded').length;
+  rows.push({ label:'Assignments graded', max:ACAD_SCORE.grading,
+    pts: subs.length ? ACAD_SCORE.grading*graded/subs.length : null,
+    sub: subs.length ? `${graded} of ${subs.length} submissions graded` : 'no submissions yet' });
+  return { rows, total: scoreTotal(rows) };
+}
+function renderAcademicsScore(){
+  const host = document.getElementById('acad-score');
+  if(!host) return;
+  const ym = TODAY.slice(0,7), prevYm = monthShift(ym,-1);
+  host.innerHTML = scoreCardHTML({
+    title:`Academics Score · ${monthName(ym)} ${ym.slice(0,4)}`, sub:`Classes, follow-ups and grading · vs ${monthName(prevYm)}`,
+    cur:academicsScoreFor(ym), prev:academicsScoreFor(prevYm), prevName:monthName(prevYm)
+  });
+}
+
+/* ---- Placement Score (Placements Overview): students placed (50) + waiting time (25) + feedback rating (25) ----
+   Everything is measured as it stood at the end of the month (or today, for the current month), so last month's column is comparable. */
+const PLACE_SCORE = { placed:50, waiting:25, feedback:25, waitDays:30 };   // waiting longer than 30 days without a partner loses points
+function placementsScoreFor(ym){
+  const [y,m] = ym.split('-').map(Number);
+  const monthEnd = `${ym}-${String(daysInCalendarMonth(y,m)).padStart(2,'0')}`, asOf = monthEnd<TODAY ? monthEnd : TODAY;
+  const regs = placements.filter(x=>x.status!=='Withdrawn' && (!x.registeredDate || x.registeredDate<=asOf));
+  const placedBy = x => (x.status==='Placed' || x.status==='Completed') && (!x.startDate || x.startDate<=asOf);
+  const placedN = regs.filter(placedBy).length;
+  const rows = [];
+  rows.push({ label:'Students placed', max:PLACE_SCORE.placed,
+    pts: regs.length ? PLACE_SCORE.placed*placedN/regs.length : null,
+    sub: regs.length ? `${placedN} of ${regs.length} registered students placed` : 'no students registered yet' });
+  const waiting = regs.filter(x=>!placedBy(x));
+  const fresh = waiting.filter(x=>!x.registeredDate || (Date.parse(asOf)-Date.parse(x.registeredDate))/86400000 <= PLACE_SCORE.waitDays).length;
+  rows.push({ label:'Waiting time', max:PLACE_SCORE.waiting,
+    pts: regs.length ? PLACE_SCORE.waiting*(waiting.length ? fresh/waiting.length : 1) : null,
+    sub: !regs.length ? 'no students registered yet' : waiting.length ? `${fresh} of ${waiting.length} waiting under ${PLACE_SCORE.waitDays} days` : 'nobody is waiting' });
+  const ratings = placements.flatMap(x=>[x.partnerReview, x.studentReview]).filter(r=>r && r.rating>0 && (!r.date || r.date<=asOf)).map(r=>r.rating);
+  const avg = avgRating(ratings);
+  rows.push({ label:'Feedback rating', max:PLACE_SCORE.feedback,
+    pts: avg!=null ? PLACE_SCORE.feedback*clamp01(avg/5) : null,
+    sub: avg!=null ? `${avg.toFixed(1)} of 5 from ${ratings.length} review${ratings.length===1?'':'s'}` : 'no reviews yet' });
+  return { rows, total: scoreTotal(rows) };
+}
+function renderPlacementsScore(){
+  const host = document.getElementById('place-score');
+  if(!host) return;
+  const ym = TODAY.slice(0,7), prevYm = monthShift(ym,-1);
+  host.innerHTML = scoreCardHTML({
+    title:`Placement Score · ${monthName(ym)} ${ym.slice(0,4)}`, sub:`Placements, waiting time and feedback · vs ${monthName(prevYm)}`,
+    cur:placementsScoreFor(ym), prev:placementsScoreFor(prevYm), prevName:monthName(prevYm)
+  });
+}
+function openMarketingStatsModal(){
+  const months = [0,1,2,3,4,5].map(i=>monthShift(TODAY.slice(0,7), -i));
+  showModal(`
+    <div class="modal-head"><h3>Update marketing numbers</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body">
+      <div class="banner muted"><div>Enter the totals for a month. Follower growth compares each month with the one before it, so enter last month's followers too.</div></div>
+      <div><label class="field-label">Month</label><select class="field-input" id="ms-month" onchange="fillMarketingStatsFields()">${months.map(m=>`<option value="${m}">${monthName(m)} ${m.slice(0,4)}</option>`).join('')}</select></div>
+      <div class="field-row">
+        <div><label class="field-label">Total followers (all platforms)</label><input class="field-input" type="number" min="0" step="1" id="ms-followers" placeholder="e.g. 12400"></div>
+        <div><label class="field-label">Average engagement rate (%)</label><input class="field-input" type="number" min="0" max="100" step="0.1" id="ms-engagement" placeholder="e.g. 4.2"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveMarketingStats()">Save</button></div></div>`);
+  fillMarketingStatsFields();
+}
+function fillMarketingStatsFields(){
+  const st = marketingStats[document.getElementById('ms-month').value] || {};
+  document.getElementById('ms-followers').value = st.followers ?? '';
+  document.getElementById('ms-engagement').value = st.engagement ?? '';
+}
+function saveMarketingStats(){
+  const ym = document.getElementById('ms-month').value;
+  const fRaw = document.getElementById('ms-followers').value.trim(), eRaw = document.getElementById('ms-engagement').value.trim();
+  const f = fRaw==='' ? null : Number(fRaw), e = eRaw==='' ? null : Number(eRaw);
+  if((f!=null && (!isFinite(f) || f<0)) || (e!=null && (!isFinite(e) || e<0 || e>100))){ toast('Enter valid numbers (engagement is a percentage up to 100)'); return; }
+  const entry = {};
+  if(f!=null) entry.followers = Math.round(f);
+  if(e!=null) entry.engagement = e;
+  if(Object.keys(entry).length) marketingStats[ym] = entry; else delete marketingStats[ym];
+  toast('Marketing numbers saved'); closeModal(); renderBoard(); renderMarketingScore();
 }
 let dragId = null;
 function onDragStart(e,id){ dragId=id; e.dataTransfer.effectAllowed='move'; }
@@ -6105,6 +6347,7 @@ function studentsOverview(){
   const deptCounts = COURSES.map(d=>({d,n:myStudents.filter(c=>c.status==="Active" && (c.coursesEnrolled||[]).includes(d)).length})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
   const maxDept = Math.max(...deptCounts.map(x=>x.n),1);
   return `
+  <div id="acad-score"></div>
   <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-label">Active Students</div><div class="kpi-value mono">${activeStudents}</div></div>
     <div class="kpi-card"><div class="kpi-label">Open Follow-ups</div><div class="kpi-value mono">${openTasks.length}</div></div>
@@ -7589,7 +7832,7 @@ const SYNC_KEYS = {
   candidates:()=>candidates, complaints:()=>complaints, notices:()=>notices, payroll:()=>payroll,
   leavePayPolicy:()=>leavePayPolicy, students:()=>students, studentComplaints:()=>studentComplaints, batches:()=>batches,
   sessionLogs:()=>sessionLogs, materials:()=>materials, assignments:()=>assignments, submissions:()=>submissions,
-  studentTasks:()=>studentTasks, contentItems:()=>contentItems, metaAdsCampaigns:()=>metaAdsCampaigns,
+  studentTasks:()=>studentTasks, contentItems:()=>contentItems, marketingStats:()=>marketingStats, metaAdsCampaigns:()=>metaAdsCampaigns,
   marketingLeads:()=>marketingLeads, quotes:()=>quotes, invoices:()=>invoices, payables:()=>payables,
   commissionWithdrawals:()=>commissionWithdrawals, expenses:()=>expenses, bankAccounts:()=>bankAccounts,
   bankTransactions:()=>bankTransactions, chartOfAccounts:()=>chartOfAccounts, journalEntries:()=>journalEntries,
