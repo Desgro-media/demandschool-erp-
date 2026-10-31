@@ -106,7 +106,7 @@ console.log('\n--- C. Leave request lifecycle across two roles ---');
 const trainer = await session('trainer');
 await login(trainer.page, 'staff', TRAINER, PW);
 const before = await trainer.page.evaluate(() => leaveRequests.length);
-await trainer.page.evaluate(() => { nav.module = 'workspace'; nav.sub.workspace = 'leave'; render(); openApplyLeave(); });
+await trainer.page.evaluate(() => { nav.module = 'workspace'; nav.sub.workspace = 'attendance'; render(); openApplyLeave(); });
 await fillForm(trainer.page, '#f-apply-leave', { reason: 'QA flow: family function' });
 await trainer.page.click('#f-apply-leave button[type=submit]');
 await trainer.page.waitForTimeout(2500);
@@ -197,7 +197,7 @@ ok('after a 500 the change is retried and saved', (await apiState((await apiLogi
 console.log('\n--- F. Session revocation ---');
 if (CAN_CLI) {
   execSync(`node scripts/set-password.js ${TRAINER} "${PW}"`, { cwd: PROJECT, stdio: 'pipe' });
-  await trainer.page.evaluate(() => { nav.module = 'workspace'; nav.sub.workspace = 'leave'; render(); openApplyLeave(); });
+  await trainer.page.evaluate(() => { nav.module = 'workspace'; nav.sub.workspace = 'attendance'; render(); openApplyLeave(); });
   await fillForm(trainer.page, '#f-apply-leave', { reason: 'after revoke' });
   await trainer.page.click('#f-apply-leave button[type=submit]');
   await trainer.page.waitForSelector('#login-screen:not([hidden])', { timeout: 8000 }).then(() => ok('revoked session is sent back to the login screen', true)).catch(() => ok('revoked session is sent back to the login screen', false, 'still logged in'));

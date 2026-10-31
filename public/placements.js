@@ -83,6 +83,7 @@ function placementsOverview(){
   const track = internshipCourses();
   return `
   <div class="toolbar"><div></div><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" onclick="openPartnerModal()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Add partner</button><button class="btn primary" onclick="openRegisterPlacement()"><svg class="icon" style="width:13px;height:13px"><use href="#i-plus"/></svg>Register students</button></div></div>
+  <div id="place-score"></div>
   <div class="kpi-grid cols-5">
     <div class="kpi-card"><div class="kpi-label">Active Partners</div><div class="kpi-value mono">${activePartners.length}</div><div class="kpi-sub">${placementPartners.length} in database</div></div>
     <div class="kpi-card"><div class="kpi-label">Open Seats</div><div class="kpi-value mono">${openSeats}</div><div class="kpi-sub">across active partners</div></div>
