@@ -4610,7 +4610,7 @@ function scoreTotal(rows){
   const avail = rows.filter(r=>r.pts!=null);
   return avail.length ? Math.round(avail.reduce((a,r)=>a+r.pts,0) / avail.reduce((a,r)=>a+r.max,0) * 100) : null;
 }
-function scoreCardHTML({title, sub, cur, prev, prevName, action}){
+function scoreCardHTML({title, sub, cur, prev, prevName, action, extra}){
   const total = cur.total;
   const tone = total==null ? 'neutral' : mscoreTone(total/100);
   const label = total==null ? 'No data yet' : total<50 ? 'Needs work' : total<75 ? 'Fair' : 'On track';
@@ -4642,16 +4642,28 @@ function scoreCardHTML({title, sub, cur, prev, prevName, action}){
         }).join('')}
       </div>
     </div>
+    ${extra||''}
   </div>`;
 }
+let mktScoreMonth = null;   // month shown on the Marketing Score card; null = the current month
+function setMktScoreMonth(ym){ mktScoreMonth = ym===TODAY.slice(0,7) ? null : ym; renderMarketingScore(); }
 function renderMarketingScore(){
   const host = document.getElementById('mkt-score');
   if(!host) return;
-  const ym = TODAY.slice(0,7), prevYm = monthShift(ym,-1);
+  const nowYm = TODAY.slice(0,7), ym = mktScoreMonth || nowYm, prevYm = monthShift(ym,-1);
+  const months = [0,1,2,3,4,5,6,7,8,9,10,11].map(i=>monthShift(nowYm,-i));
+  const picker = `<select class="field-input" style="width:auto;padding:5px 8px;font-size:12px;" onchange="setMktScoreMonth(this.value)" aria-label="Score month">${months.map(m=>`<option value="${m}"${m===ym?' selected':''}>${monthName(m)} ${m.slice(0,4)}</option>`).join('')}</select>`;
+  // Last six months side by side, so it is easy to see which month went best. Click one to open it.
+  const strip = months.slice(0,6).reverse().map(m=>{
+    const t = marketingScoreFor(m).total, tone = t==null ? 'line' : mscoreTone(t/100);
+    return `<button type="button" onclick="setMktScoreMonth('${m}')" style="flex:1;min-width:70px;padding:8px 6px;border-radius:10px;cursor:pointer;text-align:center;background:var(--surface,transparent);border:1px solid var(--${tone});${m===ym?'box-shadow:0 0 0 2px var(--'+tone+');':''}">
+      <div style="font-size:11px;opacity:.7;">${monthName(m).slice(0,3)} ${m.slice(2,4)}</div><div style="font-size:18px;font-weight:700;">${t==null?'—':t}</div></button>`;
+  }).join('');
   host.innerHTML = scoreCardHTML({
     title:`Marketing Score · ${monthName(ym)} ${ym.slice(0,4)}`, sub:`Content, followers and engagement · vs ${monthName(prevYm)}`,
     cur:marketingScoreFor(ym), prev:marketingScoreFor(prevYm), prevName:monthName(prevYm),
-    action: canEditMarketingStats()?`<button class="btn btn-sm ghost" onclick="openMarketingStatsModal()"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Update numbers</button>`:''
+    action: picker + (canEditMarketingStats()?`<button class="btn btn-sm ghost" onclick="openMarketingStatsModal()"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Update numbers</button>`:''),
+    extra: `<div style="display:flex;gap:8px;padding:12px 16px 16px;flex-wrap:wrap;">${strip}</div>`
   });
 }
 
