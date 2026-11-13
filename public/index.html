@@ -734,6 +734,7 @@ let hrPolicy = {
   leaveCarryStart: "2026-10", // unused paid leave carries forward from this month on (earlier months are left as they were)
   leaveAdjustments: {},  // {"EMP-id|YYYY-MM": {leave, wfh}} — HR's manual balance corrections
   paidWfhPerMonth: 1,    // ...and this many paid Work From Home days per employee per month
+  partialWfhPerMonth: 2, // Partially Paid WFH (75% payout) days an employee may take per month — resets every month
   weeklyOff: 0, // day-of-week index (0=Sunday) — the one recurring non-working day, on top of marked holidays
   notes: "",
   holidays: [],
@@ -812,6 +813,9 @@ let leaveRequests = [];
 // Which leave types an employee may still apply for in the month of `from`. Casual/Sick needs paid leave left
 // (approved days + pending requests both count); once it's gone only WFH / Partially Paid WFH / Unpaid Leave remain.
 // WFH needs paid WFH left — after that only Partially Paid WFH (75%) is offered.
+const PWFH_TYPE = "Partially Paid WFH (75% payout)";
+// Saved HR policy may predate this field, so fall back to 2.
+const partialWfhCap = ()=>Number.isFinite(hrPolicy.partialWfhPerMonth) ? hrPolicy.partialWfhPerMonth : 2;
 function leaveTypeAvailability(empId, from){
   const month = (from || TODAY).slice(0,7);
   const c = monthlyAttendanceCounts(empId, month);
@@ -819,6 +823,7 @@ function leaveTypeAvailability(empId, from){
   return {
     casual: paidLeaveUsedFor(empId, month) + pending("Casual/Sick") < paidLeaveAllowance(empId, month),
     wfh: c.wfh + pending("WFH") < paidWfhAllowance(empId, month),
+    pwfh: c.pwfh + pending(PWFH_TYPE) < partialWfhCap(),
   };
 }
 // Greys out the unavailable types in a leave form's Type select and moves the choice to one that's allowed.
@@ -827,9 +832,9 @@ function applyLeaveTypeLimits(selectEl, empId, from){
   const av = leaveTypeAvailability(empId, from);
   [...selectEl.options].forEach(o=>{
     if(!o.hasAttribute("value")) o.setAttribute("value", o.value); // keep the value when the label text changes below
-    const blocked = (o.value==="Casual/Sick" && !av.casual) || (o.value==="WFH" && !av.wfh);
+    const blocked = (o.value==="Casual/Sick" && !av.casual) || (o.value==="WFH" && !av.wfh) || (o.value===PWFH_TYPE && !av.pwfh);
     o.disabled = blocked;
-    o.textContent = o.value + (o.value==="Casual/Sick" && blocked ? " — paid leave used up" : o.value==="WFH" && blocked ? " — paid WFH used up" : "");
+    o.textContent = o.value + (o.value==="Casual/Sick" && blocked ? " — paid leave used up" : o.value==="WFH" && blocked ? " — paid WFH used up" : o.value===PWFH_TYPE && blocked ? " — monthly limit reached" : "");
   });
   if(selectEl.selectedOptions[0] && selectEl.selectedOptions[0].disabled){
     const ok = [...selectEl.options].find(o=>!o.disabled);
@@ -2717,6 +2722,7 @@ function openApplyLeave(){
     if(from===to && duration==="Quarter Day") days = 0.25;
     const av = leaveTypeAvailability(currentUser.id, from), chosen = f.get("type");
     if((chosen==="Casual/Sick" && !av.casual) || (chosen==="WFH" && !av.wfh)){ toast("You've used your paid "+(chosen==="WFH"?"WFH":"leave")+" for this month — choose Partially Paid WFH or Unpaid Leave"); return; }
+    if(chosen===PWFH_TYPE && !av.pwfh){ toast("Partially Paid WFH is limited to "+partialWfhCap()+" days a month — that limit is reached"); return; }
     leaveRequests.unshift({id:"LR-"+(400+leaveRequests.length+1), empId:currentUser.id, type:f.get("type"), duration:(from===to?duration:"Full Day"), from, to, days, reason:f.get("reason"), status:"Pending", applied:TODAY});
     toast("Leave request submitted"); closeModal(); render();
   });
@@ -4162,6 +4168,7 @@ function openAddLeave(){
     if(from===to && duration==="Quarter Day") days = 0.25;
     const av = leaveTypeAvailability(f.get("empId"), from), chosen = f.get("type");
     if((chosen==="Casual/Sick" && !av.casual) || (chosen==="WFH" && !av.wfh)){ toast("Paid "+(chosen==="WFH"?"WFH":"leave")+" is used up for this employee this month — choose Partially Paid WFH or Unpaid Leave"); return; }
+    if(chosen===PWFH_TYPE && !av.pwfh){ toast("Partially Paid WFH is limited to "+partialWfhCap()+" days a month — that limit is reached"); return; }
     leaveRequests.unshift({id:"LR-"+(400+leaveRequests.length+1), empId:f.get("empId"), type:f.get("type"), duration:(from===to?duration:"Full Day"), from, to, days, reason:f.get("reason"), status:"Pending", applied:TODAY});
     toast("Leave request submitted"); closeModal(); render();
   });
