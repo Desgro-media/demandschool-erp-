@@ -22,6 +22,16 @@ export default route(['POST'], async (req, res) => {
 
   // Removes a staff login (used when an employee is deleted permanently). The employee record must still exist
   // here so the leadership/self checks can run; the browser deletes the record afterwards.
+  if (body.action === 'delete' && body.kind === 'student') {
+    // Removes a student's portal login when the student is deleted. Leadership only, since deleting a
+    // student also deletes their (unpaid) invoices.
+    if (who.access !== 'leadership') throw httpError(403, 'Only leadership can delete students');
+    const refId = String(body.refId || '');
+    if (!refId) throw httpError(400, 'refId is required');
+    await store.deleteUserByRef('student', refId);
+    await store.audit(me.id, 'user.delete', `student:${refId}`);
+    return send(res, 200, { ok: true });
+  }
   if (body.action === 'delete') {
     if (!canManageStaff(who)) throw httpError(403, 'Only HR or leadership can delete employees');
     const refId = String(body.refId || '');
