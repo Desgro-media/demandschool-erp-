@@ -4913,7 +4913,7 @@ function studentsAll(){
   <div class="panel">
     <div class="panel-head"><h3>${isSalesViewer?'My students':'Students'}</h3><div class="sub">${filtered.length} of ${myStudents.length}${studentsMonthFilter!=='All'?' enrolled in '+monthLabel(studentsMonthFilter):' on record'}${filterActive&&studentsMonthFilter==='All'?' · filtered':''}</div></div>
     <div class="table-wrap"><table class="data"><thead><tr><th>Student</th><th>Course</th><th>Batch</th><th>Counsellor</th>${hidePayment?'':'<th class="num">Fee Due</th>'}<th>Status</th><th></th></tr></thead>
-      <tbody>${filtered.map(c=>{ const due=studentPaymentDue(c.id); return `<tr class="row-click" onclick="openStudentDetail('${c.id}')"><td>${studentCell(c.id)}</td><td class="muted" style="max-width:220px;"><span class="tag" style="margin:1px 3px 1px 0;">${esc(c.course)}</span></td><td class="muted mono">${esc(batchLabelFor(c))}</td><td class="muted">${esc(c.counsellor||'—')}</td>${hidePayment?'':`<td class="num mono" style="${due>0?'color:var(--neg);font-weight:700;':''}">${due>0?inr(due):'—'}</td>`}<td>${pill(c.status,studentStatusKind(c.status))}</td><td><button class="btn btn-sm ghost" onclick="event.stopPropagation();openEditStudent('${c.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button></td></tr>`; }).join("") || `<tr><td colspan="${hidePayment?6:7}"><div class="empty">${filterActive?'No students match these filters.':isSalesViewer?'No students assigned to you yet.':'No students enrolled yet.'}</div></td></tr>`}</tbody>
+      <tbody>${filtered.map(c=>{ const due=studentPaymentDue(c.id); return `<tr class="row-click" onclick="openStudentDetail('${c.id}')"><td>${studentCell(c.id)}</td><td class="muted" style="max-width:220px;"><span class="tag" style="margin:1px 3px 1px 0;">${esc(c.course)}</span></td><td class="muted mono">${esc(batchLabelFor(c))}</td><td class="muted">${esc(c.counsellor||'—')}</td>${hidePayment?'':`<td class="num mono" style="${due>0?'color:var(--neg);font-weight:700;':''}">${due>0?inr(due):'—'}</td>`}<td>${pill(c.status,studentStatusKind(c.status))}</td><td style="white-space:nowrap;"><button class="btn btn-sm ghost" onclick="event.stopPropagation();openEditStudent('${c.id}')"><svg class="icon" style="width:12px;height:12px"><use href="#i-edit"/></svg>Edit</button>${canDeleteStudents()?` <button class="btn btn-sm danger" onclick="event.stopPropagation();openDeleteStudent('${c.id}')">Delete</button>`:''}</td></tr>`; }).join("") || `<tr><td colspan="${hidePayment?6:7}"><div class="empty">${filterActive?'No students match these filters.':isSalesViewer?'No students assigned to you yet.':'No students enrolled yet.'}</div></td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
@@ -4939,7 +4939,7 @@ function studentDetailPage(id){
   const mySubs = submissionsOfStudent(c.id).map(s=>({...s, a: assignments.find(a=>a.id===s.assignmentId)})).filter(x=>x.a).sort((x,y)=>y.a.dueDate.localeCompare(x.a.dueDate));
   const score = studentOverallScore(c.id);
   return `
-    <div class="toolbar"><button class="btn ghost" onclick="closeDetail()"><svg class="icon" style="width:13px;height:13px"><use href="#i-chevron-left"/></svg>Back</button><div style="display:flex;gap:8px;flex-wrap:wrap;">${canUsePlacements()?studentPlacementButtonHTML(c):''}<button class="btn primary" onclick="openEditStudent('${c.id}')"><svg class="icon" style="width:13px;height:13px"><use href="#i-edit"/></svg>Edit student</button></div></div>
+    <div class="toolbar"><button class="btn ghost" onclick="closeDetail()"><svg class="icon" style="width:13px;height:13px"><use href="#i-chevron-left"/></svg>Back</button><div style="display:flex;gap:8px;flex-wrap:wrap;">${canUsePlacements()?studentPlacementButtonHTML(c):''}<button class="btn primary" onclick="openEditStudent('${c.id}')"><svg class="icon" style="width:13px;height:13px"><use href="#i-edit"/></svg>Edit student</button>${canDeleteStudents()?`<button class="btn danger" onclick="openDeleteStudent('${c.id}')">Delete</button>`:''}</div></div>
     <div class="panel">
       <div class="panel-head"><h3>${esc(c.name)}</h3><div class="sub">${[esc(c.course), batch?esc(batch.label):null, c.city?esc(c.city):null].filter(Boolean).join(' · ')}</div></div>
       <div class="modal-body">
@@ -4948,6 +4948,12 @@ function studentDetailPage(id){
         <div><label class="field-label">Sales Person</label><div>${esc(c.salesPerson||'—')}</div></div>
         <div><label class="field-label">Phone</label><div>${esc(c.phone||'—')}</div></div>
         <div><label class="field-label">Email</label><div>${esc(c.email||'—')}</div></div>
+        <div><label class="field-label">Date of birth</label><div>${c.dob?fmtDate(c.dob):'—'}</div></div>
+        <div><label class="field-label">Blood group</label><div>${esc(c.bloodGroup||'—')}</div></div>
+        <div><label class="field-label">Qualification</label><div>${esc(c.qualification||'—')}</div></div>
+        <div><label class="field-label">Parent name</label><div>${esc(c.parentName||'—')}</div></div>
+        <div><label class="field-label">Parent mobile</label><div>${esc(c.parentPhone||'—')}</div></div>
+        <div><label class="field-label">Address</label><div style="white-space:pre-line;">${esc(c.address||'—')}</div></div>
         <div><label class="field-label">Enrolled</label><div>${fmtDate(c.onboarded)}</div></div>
         <div><label class="field-label">Batch</label><div>${batch?`<a href="javascript:void(0)" onclick="openBatchDetail('${batch.id}')" style="color:var(--brand-strong);font-weight:700;">${esc(batch.label)}</a> · starts ${fmtDateShort(batch.startDate)}`:'<span class="faint">not assigned</span>'}</div></div>
         <div><label class="field-label">Courses Enrolled</label><div>${(c.coursesEnrolled||[c.course]).map(s=>`<span class="tag" style="margin:1px 3px 1px 0;">${esc(s)}</span>`).join('')}</div></div>
@@ -5016,6 +5022,49 @@ function openMarkAttendance(studentId){
     toast("Attendance saved"); closeModal(); render();
   });
 }
+// Deleting a student is leadership-only: it also removes their unpaid invoices. A student with any fee
+// money received (or waiting on Finance) can't be deleted — that would break Accounts and the bank
+// ledger — so the modal points to marking them Dropped instead.
+function canDeleteStudents(){ return !!currentUser && accessOf(currentUser)==="leadership"; }
+function studentDeleteBlocker(id){
+  const inv = invoices.filter(i=>i.studentId===id);
+  if(inv.some(i=>invoicePaid(i)>0)) return "has fee payments recorded";
+  if(inv.some(i=>invoicePendingAmount(i)>0)) return "has a fee payment waiting for Finance to confirm";
+  if(quotes.some(q=>q.studentId===id && ((q.payments||[]).length || (q.pendingPayments||[]).length))) return "has payments recorded on a quote";
+  return "";
+}
+function openDeleteStudent(id){
+  const c = studentById(id); if(!c) return;
+  const blocked = !canDeleteStudents() ? "Only leadership can delete students." : (()=>{ const b = studentDeleteBlocker(id); return b ? `${c.name} ${b}, so deleting them would break the Accounts records. Set their status to Dropped instead.` : ""; })();
+  const invCount = invoices.filter(i=>i.studentId===id).length;
+  showModal(`
+    <div class="modal-head"><h3>Delete student</h3><button class="modal-close" onclick="closeModal()"><svg class="icon" style="width:14px;height:14px"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:8px;">${studentCell(id)}</div>
+      ${blocked ? `<div class="banner"><div>${esc(blocked)}</div></div>` : `<div class="banner"><svg class="icon" style="width:15px;height:15px"><use href="#i-bell"/></svg><div><b>This cannot be undone.</b> ${esc(c.name)}'s portal login is removed, along with ${invCount?invCount+' unpaid invoice'+(invCount>1?'s':'')+', ':''}their attendance, follow-ups, assignment submissions, complaints and placement record. If they've only left the course, set their status to Dropped instead.</div></div>`}
+    </div>
+    <div class="modal-foot"><div></div><div style="display:flex;gap:8px;"><button class="btn ghost" onclick="closeModal()">Cancel</button>${blocked?"":`<button class="btn danger" onclick="deleteStudent('${c.id}')">Delete permanently</button>`}</div></div>`);
+}
+async function deleteStudent(id){
+  const c = studentById(id); if(!c || !canDeleteStudents() || studentDeleteBlocker(id)) return;
+  try{
+    await saveNow();
+    await api('users', { method:'POST', body:{ action:'delete', kind:'student', refId:id } });
+  }catch(err){ toast("Not deleted: "+err.message); return; }
+  const invIds = new Set(invoices.filter(i=>i.studentId===id).map(i=>i.id));
+  invoices = invoices.filter(i=>!invIds.has(i.id));
+  bankTransactions = bankTransactions.filter(t=>!invIds.has(t.ref));
+  // A quote raised from a lead goes back to that lead; one raised straight to the student goes with them.
+  quotes.forEach(q=>{ if(invIds.has(q.invoiceId)){ q.invoiceId=null; if(q.status==='Invoiced') q.status='Submitted to Finance'; } if(q.studentId===id && q.leadId) q.studentId=null; });
+  quotes = quotes.filter(q=>q.studentId!==id);
+  submissions = submissions.filter(s=>s.studentId!==id);
+  studentComplaints = studentComplaints.filter(x=>x.studentId!==id);
+  studentTasks = studentTasks.filter(t=>t.studentId!==id);
+  if(typeof placements!=='undefined') placements = placements.filter(p=>p.studentId!==id);
+  students = students.filter(s=>s.id!==id);
+  if(nav.detail && nav.detail.type==='student' && nav.detail.id===id) nav.detail = null;
+  toast(c.name+" deleted"); closeModal(); render();
+}
 function openEditStudent(id){
   const c = studentById(id);
   showModal(`
@@ -5026,6 +5075,7 @@ function openEditStudent(id){
         <div><label class="field-label">Phone</label><input class="field-input" name="phone" value="${esc(c.phone||'')}"></div>
         <div><label class="field-label">Email</label><input class="field-input" type="email" name="email" value="${esc(c.email||'')}"></div>
       </div>
+      ${studentPersonalFieldsHTML(c)}
       <div class="field-row">
         <div><label class="field-label">Course</label><select class="field-input" name="course" required onchange="updateRegisterBatchOptions(this.value)">${COURSES.map(d=>`<option ${d===c.course?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div><label class="field-label">Batch</label><select class="field-input" name="batchId" id="register-batch-select">${batchesOf(c.course).map(b=>`<option value="${b.id}" ${b.id===c.batchId?'selected':''}>${esc(b.label)}</option>`).join('') || '<option value="">— none —</option>'}</select></div>
@@ -5060,7 +5110,7 @@ function openEditStudent(id){
     const button = e.target.querySelector('button[type="submit"]');
     if(button.disabled) return;
     const batchId = f.get("batchId") || null;
-    Object.assign(c, {name:f.get("name"), phone:f.get("phone"), email:f.get("email"), course:f.get("course"), batch:batchId||c.batch, batchId, city:f.get("city"), coursesEnrolled:f.getAll("services"), counsellor:f.get("accountManager"), salesPerson:f.get("salesPerson"), status:f.get("status")});
+    Object.assign(c, {name:f.get("name"), phone:f.get("phone"), email:f.get("email"), course:f.get("course"), batch:batchId||c.batch, batchId, city:f.get("city"), coursesEnrolled:f.getAll("services"), counsellor:f.get("accountManager"), salesPerson:f.get("salesPerson"), status:f.get("status"), ...studentPersonalFieldsFrom(f)});
     if(password){
       button.disabled = true;
       button.textContent = "Saving…";
@@ -5345,10 +5395,14 @@ function openRecordQuotePayment(id){
     toast("Sent to Finance for confirmation"); closeModal(); render();
   });
 }
-// Next free student ID: one more than the highest number in use. (students.length+1 reused IDs once a student
-// had been removed, so new students landed on an existing student's ID and took over their invoices and page.)
+// Next free student ID: one more than the highest number in use ANYWHERE. Counting only the students list reused
+// IDs once a student was removed (students.length+1), and also when the newest student was removed while their
+// invoices/quotes/etc. stayed behind: the new student then took over those leftover records.
 function nextStudentId(){
-  const top = students.reduce((m,x)=>{ const r = /^STU-(\d+)$/.exec(String(x && x.id)); return r ? Math.max(m, Number(r[1])) : m; }, 0);
+  let top = 0;
+  const seen = v => { const r = /^STU-(\d+)$/.exec(String(v)); if(r) top = Math.max(top, Number(r[1])); };
+  students.forEach(x=>seen(x && x.id));
+  [invoices, quotes, submissions, studentComplaints, withdrawalRequests].forEach(list=>(list||[]).forEach(x=>seen(x && x.studentId)));
   return "STU-"+String(top+1).padStart(2,'0');
 }
 function updateRegisterBatchOptions(course){
@@ -5360,6 +5414,26 @@ function updateRegisterBatchOptions(course){
 // Registration IS enrollment: pick the course, pick the batch (which carries its own start date and
 // payment schedule — see openAddBatch()), and the fee invoice(s) are raised automatically off that
 // schedule the moment the student is saved. See generateFeeInvoices().
+// Personal details collected on the registration form (and editable later): address, date of birth,
+// qualification, blood group and a parent/guardian contact. Shared by Register and Edit student.
+const BLOOD_GROUPS = ["A+","A-","B+","B-","AB+","AB-","O+","O-"];
+function studentPersonalFieldsHTML(c = {}){
+  return `
+      <div class="field-row">
+        <div><label class="field-label">Date of birth</label><input class="field-input" type="date" name="dob" max="${TODAY}" value="${esc(c.dob||'')}"></div>
+        <div><label class="field-label">Blood group</label><select class="field-input" name="bloodGroup"><option value="">— select —</option>${BLOOD_GROUPS.map(g=>`<option ${g===c.bloodGroup?'selected':''}>${g}</option>`).join('')}</select></div>
+      </div>
+      <div><label class="field-label">Address</label><textarea class="field-input" name="address" rows="2" placeholder="House, street, city, PIN">${esc(c.address||'')}</textarea></div>
+      <div><label class="field-label">Qualification</label><input class="field-input" name="qualification" placeholder="e.g. B.Com, Plus Two" value="${esc(c.qualification||'')}"></div>
+      <div class="field-row">
+        <div><label class="field-label">Parent name</label><input class="field-input" name="parentName" value="${esc(c.parentName||'')}"></div>
+        <div><label class="field-label">Parent mobile</label><input class="field-input" name="parentPhone" placeholder="9847xxxxxx" value="${esc(c.parentPhone||'')}"></div>
+      </div>`;
+}
+function studentPersonalFieldsFrom(f){
+  const v = k => String(f.get(k)||"").trim();
+  return {dob:v("dob"), bloodGroup:v("bloodGroup"), address:v("address"), qualification:v("qualification"), parentName:v("parentName"), parentPhone:v("parentPhone")};
+}
 function openAddStudent(){
   const firstCourse = COURSES[0];
   showModal(`
@@ -5370,6 +5444,7 @@ function openAddStudent(){
         <div><label class="field-label">Phone</label><input class="field-input" name="phone" placeholder="9847xxxxxx"></div>
         <div><label class="field-label">Email</label><input class="field-input" type="email" name="email"></div>
       </div>
+      ${studentPersonalFieldsHTML()}
       <div class="field-row">
         <div><label class="field-label">Course</label><select class="field-input" name="course" required onchange="updateRegisterBatchOptions(this.value)">${COURSES.map(d=>`<option>${esc(d)}</option>`).join('')}</select></div>
         <div><label class="field-label">Batch</label><select class="field-input" name="batchId" id="register-batch-select" required>${batchesOf(firstCourse).map(b=>`<option value="${b.id}">${esc(b.label)} — ${batchScheduleLabel(b)} · starts ${fmtDateShort(b.startDate)}</option>`).join('')}</select></div>
@@ -5386,7 +5461,7 @@ function openAddStudent(){
     const course = f.get("course");
     const batch = batchById(f.get("batchId"));
     if(!batch){ toast("Start a batch for this course first"); return; }
-    const student = {id:nextStudentId(), name:f.get("name"), phone:f.get("phone"), email:f.get("email"), course, batch:batch.id, batchId:batch.id, city:"", coursesEnrolled:[course], status:"Active", onboarded:TODAY, counsellor:"", salesPerson:f.get("salesPerson"), attendance:[]};
+    const student = {id:nextStudentId(), name:f.get("name"), phone:f.get("phone"), email:f.get("email"), course, batch:batch.id, batchId:batch.id, city:"", coursesEnrolled:[course], status:"Active", onboarded:TODAY, counsellor:"", salesPerson:f.get("salesPerson"), attendance:[], ...studentPersonalFieldsFrom(f)};
     students.push(student);
     const inv = generateFeeInvoices(student, batch);
     toast("Student registered"+(inv.length?" · "+inv.length+" invoice"+(inv.length>1?'s':'')+" raised":"")); closeModal(); render();
